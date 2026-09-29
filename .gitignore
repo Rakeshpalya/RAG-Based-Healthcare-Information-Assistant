@@ -1,0 +1,53 @@
+# Python virtual environment
+venv/
+.venv/
+ENV/
+env/
+
+# Byte-compiled / optimized files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Environment variables
+.env
+
+# Testing & Coverage
+.pytest_cache/
+.coverage
+htmlcov/
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+
+# Data files (keep placeholders)
+data/documents/*
+!data/documents/.gitkeep
+data/processed/*
+!data/processed/.gitkeep
+data/vector_store/*
+!data/vector_store/.gitkeep
+
+# Operating system
+.DS_Store
+Thumbs.db
+
+# Secrets, certificates, and databases
+*.pem
+*.key
+*.cert
+*.crt
+*.db
+*.sqlite
+*.sqlite3
+
+# Node modules & frontend artifacts
+node_modules/
+dist/
+build/
+
+# Scratch & temporary files
+scratch/
+tmp/

@@ -1,0 +1,111 @@
+[
+  {
+    "id": "HAL_01",
+    "description": "Faithful grounded answer with zero hallucinations",
+    "answer": "Hypertension is defined as persistent elevation of arterial blood pressure. [Source 1]",
+    "sources": [
+      {
+        "source_id": 1,
+        "document_name": "cardio.pdf",
+        "document_id": "DOC_01",
+        "page_number": 1,
+        "text": "Hypertension is defined as persistent elevation of arterial blood pressure above clinical cutoffs."
+      }
+    ],
+    "expected_has_hallucinations": false,
+    "expected_hallucination_types": [],
+    "expected_contradiction": false
+  },
+  {
+    "id": "HAL_02",
+    "description": "Fabricated medication substitution not present in reference source",
+    "answer": "Lisinopril is prescribed daily for the management of hypertension. [Source 1]",
+    "sources": [
+      {
+        "source_id": 1,
+        "document_name": "cardio.pdf",
+        "document_id": "DOC_01",
+        "page_number": 1,
+        "text": "TREATMENT PLAN: Prescribed Amlodipine 5mg daily and low-sodium diet for hypertension."
+      }
+    ],
+    "expected_has_hallucinations": true,
+    "expected_hallucination_types": ["MEDICATION_HALLUCINATION"],
+    "expected_contradiction": false
+  },
+  {
+    "id": "HAL_03",
+    "description": "Fabricated dosage modification altering safe clinical strength",
+    "answer": "Amlodipine 50 mg daily is recommended for stage 2 hypertension. [Source 1]",
+    "sources": [
+      {
+        "source_id": 1,
+        "document_name": "cardio.pdf",
+        "document_id": "DOC_01",
+        "page_number": 1,
+        "text": "TREATMENT PLAN: Prescribed Amlodipine 5mg daily for stage 2 hypertension."
+      }
+    ],
+    "expected_has_hallucinations": true,
+    "expected_hallucination_types": ["DOSAGE_HALLUCINATION"],
+    "expected_contradiction": false
+  },
+  {
+    "id": "HAL_04",
+    "description": "Negation contradiction inverting clinical warning",
+    "answer": "Patients taking calcium channel blockers should take them with grapefruit juice. [Source 1]",
+    "sources": [
+      {
+        "source_id": 1,
+        "document_name": "cardio.pdf",
+        "document_id": "DOC_01",
+        "page_number": 1,
+        "text": "Patients taking calcium channel blockers should not consume grapefruit juice due to CYP3A4 inhibition."
+      }
+    ],
+    "expected_has_hallucinations": true,
+    "expected_hallucination_types": ["NEGATION_CONTRADICTION"],
+    "expected_contradiction": true
+  },
+  {
+    "id": "HAL_05",
+    "description": "Directional contradiction reversing physiological parameter trend",
+    "answer": "Metformin therapy significantly increases fasting blood glucose levels. [Source 1]",
+    "sources": [
+      {
+        "source_id": 1,
+        "document_name": "trial_report.pdf",
+        "document_id": "DOC_02",
+        "page_number": 1,
+        "text": "Metformin therapy significantly decreases fasting blood glucose levels and reduces HbA1c."
+      }
+    ],
+    "expected_has_hallucinations": true,
+    "expected_hallucination_types": ["DIRECTIONAL_CONTRADICTION"],
+    "expected_contradiction": true
+  },
+  {
+    "id": "HAL_06",
+    "description": "Wrong-source citation attributing asthma bronchodilator therapy to cardiology document",
+    "answer": "Acute bronchospasm in asthma is effectively relieved by short-acting albuterol inhalers. [Source 1]",
+    "sources": [
+      {
+        "source_id": 1,
+        "document_name": "cardio.pdf",
+        "document_id": "DOC_01",
+        "page_number": 1,
+        "text": "Cardiology clinic report: Patient John Doe diagnosed with Stage 2 Essential Hypertension."
+      },
+      {
+        "source_id": 2,
+        "document_name": "asthma.pdf",
+        "document_id": "DOC_02",
+        "page_number": 1,
+        "text": "Acute bronchospasm in asthma is effectively relieved by short-acting albuterol inhalers."
+      }
+    ],
+    "expected_has_hallucinations": true,
+    "expected_hallucination_types": ["WRONG_SOURCE"],
+    "expected_contradiction": false
+  }
+]

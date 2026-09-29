@@ -1,0 +1,170 @@
+[
+  {
+    "id": "Q001",
+    "question": "What threshold of sustained systemic blood pressure indicates a diagnosis of arterial hypertension?",
+    "topic": "hypertension",
+    "expected_chunk_ids": ["MED_CHUNK_0"],
+    "relevant_document_ids": ["DOC_CARDIO_001"]
+  },
+  {
+    "id": "Q002",
+    "question": "How does chronic elevation of blood pressure affect the structural integrity of the left ventricle and vasculature?",
+    "topic": "hypertension",
+    "expected_chunk_ids": ["MED_CHUNK_0"],
+    "relevant_document_ids": ["DOC_CARDIO_001"]
+  },
+  {
+    "id": "Q003",
+    "question": "What pathophysiological mechanisms cause elevated blood sugar in adult-onset type 2 diabetes?",
+    "topic": "diabetes",
+    "expected_chunk_ids": ["MED_CHUNK_1"],
+    "relevant_document_ids": ["DOC_ENDO_001"]
+  },
+  {
+    "id": "Q004",
+    "question": "What diagnostic glycated hemoglobin level differentiates diabetes from prediabetes?",
+    "topic": "diabetes",
+    "expected_chunk_ids": ["MED_CHUNK_7"],
+    "relevant_document_ids": ["DOC_ENDO_002"]
+  },
+  {
+    "id": "Q005",
+    "question": "What airway inflammatory processes produce bronchial hyperresponsiveness and wheezing?",
+    "topic": "asthma",
+    "expected_chunk_ids": ["MED_CHUNK_2"],
+    "relevant_document_ids": ["DOC_PULM_001"]
+  },
+  {
+    "id": "Q006",
+    "question": "Which inhaled anti-inflammatory medication is prescribed as primary controller therapy for chronic asthma?",
+    "topic": "asthma",
+    "expected_chunk_ids": ["MED_CHUNK_9"],
+    "relevant_document_ids": ["DOC_PULM_002"]
+  },
+  {
+    "id": "Q007",
+    "question": "What fast-acting rescue inhaler relaxes bronchial smooth muscle during acute constriction?",
+    "topic": "asthma",
+    "expected_chunk_ids": ["MED_CHUNK_15"],
+    "relevant_document_ids": ["DOC_PULM_003"]
+  },
+  {
+    "id": "Q008",
+    "question": "How much weekly aerobic exercise is recommended to optimize vascular elasticity and lower blood pressure?",
+    "topic": "physical activity",
+    "expected_chunk_ids": ["MED_CHUNK_3"],
+    "relevant_document_ids": ["DOC_PREV_001"]
+  },
+  {
+    "id": "Q009",
+    "question": "What glomerular filtration rate threshold defines chronic renal dysfunction persisting over three months?",
+    "topic": "kidney disease",
+    "expected_chunk_ids": ["MED_CHUNK_4"],
+    "relevant_document_ids": ["DOC_NEPHRO_001"]
+  },
+  {
+    "id": "Q10",
+    "question": "What urinary biomarker detects early nephropathy and glomerular damage in diabetic patients?",
+    "topic": "kidney disease",
+    "expected_chunk_ids": ["MED_CHUNK_10"],
+    "relevant_document_ids": ["DOC_NEPHRO_002"]
+  },
+  {
+    "id": "Q011",
+    "question": "By what mechanism does furosemide promote sodium excretion to resolve pulmonary fluid overload?",
+    "topic": "pharmacology",
+    "expected_chunk_ids": ["MED_CHUNK_5"],
+    "relevant_document_ids": ["DOC_PHARM_001"]
+  },
+  {
+    "id": "Q012",
+    "question": "How do ACE inhibitors like lisinopril reduce intraglomerular pressure and protect the kidneys?",
+    "topic": "pharmacology",
+    "expected_chunk_ids": ["MED_CHUNK_11"],
+    "relevant_document_ids": ["DOC_PHARM_002"]
+  },
+  {
+    "id": "Q013",
+    "question": "What daily sodium restriction and dietary guidelines are emphasized in the DASH dietary protocol?",
+    "topic": "nutrition",
+    "expected_chunk_ids": ["MED_CHUNK_6"],
+    "relevant_document_ids": ["DOC_NUTR_001"]
+  },
+  {
+    "id": "Q014",
+    "question": "Why does minimizing ultra-processed foods containing trans fats improve metabolic inflammation?",
+    "topic": "nutrition",
+    "expected_chunk_ids": ["MED_CHUNK_13"],
+    "relevant_document_ids": ["DOC_NUTR_002"]
+  },
+  {
+    "id": "Q015",
+    "question": "How does subendothelial low-density lipoprotein deposition initiate coronary arterial plaque formation?",
+    "topic": "cardiovascular health",
+    "expected_chunk_ids": ["MED_CHUNK_8"],
+    "relevant_document_ids": ["DOC_CARDIO_002"]
+  },
+  {
+    "id": "Q016",
+    "question": "What clinical features and biomarker elevations characterize heart failure with preserved ejection fraction?",
+    "topic": "cardiovascular health",
+    "expected_chunk_ids": ["MED_CHUNK_14"],
+    "relevant_document_ids": ["DOC_CARDIO_003"]
+  },
+  {
+    "id": "Q017",
+    "question": "At what age should average-risk individuals initiate colorectal cancer screening and periodic preventative checks?",
+    "topic": "general preventive health",
+    "expected_chunk_ids": ["MED_CHUNK_12"],
+    "relevant_document_ids": ["DOC_PREV_002"]
+  },
+  {
+    "id": "Q018",
+    "question": "What routine health screening tests are recommended for evaluating cardiovascular and metabolic wellness?",
+    "topic": "general preventive health",
+    "expected_chunk_ids": ["MED_CHUNK_12"],
+    "relevant_document_ids": ["DOC_PREV_002"]
+  },
+  {
+    "id": "Q019",
+    "question": "How does high arterial blood pressure accelerate chronic kidney disease progression?",
+    "topic": "hypertension",
+    "expected_chunk_ids": ["MED_CHUNK_4", "MED_CHUNK_0"],
+    "relevant_document_ids": ["DOC_NEPHRO_001", "DOC_CARDIO_001"]
+  },
+  {
+    "id": "Q020",
+    "question": "What role does regular physical training play in enhancing peripheral glucose sensitivity?",
+    "topic": "physical activity",
+    "expected_chunk_ids": ["MED_CHUNK_3"],
+    "relevant_document_ids": ["DOC_PREV_001"]
+  },
+  {
+    "id": "Q021",
+    "question": "Which pharmacologic agents block angiotensin II production to mitigate proteinuria?",
+    "topic": "pharmacology",
+    "expected_chunk_ids": ["MED_CHUNK_11"],
+    "relevant_document_ids": ["DOC_PHARM_002"]
+  },
+  {
+    "id": "Q022",
+    "question": "What time period does an HbA1c test reflect regarding circulating glucose levels?",
+    "topic": "diabetes",
+    "expected_chunk_ids": ["MED_CHUNK_7"],
+    "relevant_document_ids": ["DOC_ENDO_002"]
+  },
+  {
+    "id": "Q023",
+    "question": "How does sodium restriction under DASH improve arterial blood pressure measurements?",
+    "topic": "nutrition",
+    "expected_chunk_ids": ["MED_CHUNK_6"],
+    "relevant_document_ids": ["DOC_NUTR_001"]
+  },
+  {
+    "id": "Q024",
+    "question": "What cellular events in the coronary subendothelium lead to foam-cell and fibrous atheroma development?",
+    "topic": "cardiovascular health",
+    "expected_chunk_ids": ["MED_CHUNK_8"],
+    "relevant_document_ids": ["DOC_CARDIO_002"]
+  }
+]

@@ -1,0 +1,130 @@
+[
+  {
+    "chunk_id": "MED_CHUNK_0",
+    "document_id": "DOC_CARDIO_001",
+    "page_number": 1,
+    "topic": "hypertension",
+    "text": "Hypertension is a chronic medical condition in which systemic arterial blood pressure remains persistently elevated above 130/80 mmHg. Prolonged arterial hypertension induces vascular endothelial remodeling, arterial stiffness, and left ventricular hypertrophy.",
+    "category": "Cardiology"
+  },
+  {
+    "chunk_id": "MED_CHUNK_1",
+    "document_id": "DOC_ENDO_001",
+    "page_number": 1,
+    "topic": "diabetes",
+    "text": "Type 2 diabetes mellitus is a metabolic disorder characterized by peripheral insulin resistance, inadequate compensatory insulin secretion, and chronic progressive pancreatic beta-cell dysfunction, resulting in persistent hyperglycemia and microvascular damage.",
+    "category": "Endocrinology"
+  },
+  {
+    "chunk_id": "MED_CHUNK_2",
+    "document_id": "DOC_PULM_001",
+    "page_number": 1,
+    "topic": "asthma",
+    "text": "Asthma is a chronic inflammatory disorder of the conducting airways characterized by bronchial hyperresponsiveness, reversible airflow limitation, eosinophilic infiltration, and recurrent episodes of wheezing, dyspnea, and nocturnal cough.",
+    "category": "Pulmonology"
+  },
+  {
+    "chunk_id": "MED_CHUNK_3",
+    "document_id": "DOC_PREV_001",
+    "page_number": 1,
+    "topic": "physical activity",
+    "text": "Engaging in regular moderate-intensity aerobic physical activity for at least 150 minutes per week improves myocardial perfusion, enhances peripheral insulin sensitivity, reduces resting systolic blood pressure, and promotes vascular nitric oxide bioavailability.",
+    "category": "Preventive Cardiology"
+  },
+  {
+    "chunk_id": "MED_CHUNK_4",
+    "document_id": "DOC_NEPHRO_001",
+    "page_number": 1,
+    "topic": "kidney disease",
+    "text": "Chronic kidney disease (CKD) manifests as sustained structural renal injury or persistent decline in glomerular filtration rate (eGFR < 60 mL/min/1.73 m²) for more than three months, frequently accelerated by uncontrolled systemic arterial hypertension and diabetic microangiopathy.",
+    "category": "Nephrology"
+  },
+  {
+    "chunk_id": "MED_CHUNK_5",
+    "document_id": "DOC_PHARM_001",
+    "page_number": 1,
+    "topic": "pharmacology",
+    "text": "Loop diuretics, such as Furosemide, reversibly inhibit the Na-K-2Cl cotransporter in the thick ascending limb of the loop of Henle, promoting natriuresis and diuresis to relieve volume overload and acute pulmonary congestion in decompensated heart failure.",
+    "category": "Cardiovascular Pharmacology"
+  },
+  {
+    "chunk_id": "MED_CHUNK_6",
+    "document_id": "DOC_NUTR_001",
+    "page_number": 1,
+    "topic": "nutrition",
+    "text": "The Dietary Approaches to Stop Hypertension (DASH) dietary pattern emphasizes high consumption of fruits, vegetables, whole grains, and low-fat dairy while restricting sodium intake below 2,300 mg daily, which significantly reduces systolic arterial pressure.",
+    "category": "Clinical Nutrition"
+  },
+  {
+    "chunk_id": "MED_CHUNK_7",
+    "document_id": "DOC_ENDO_002",
+    "page_number": 2,
+    "topic": "diabetes",
+    "text": "Glycated hemoglobin (HbA1c) reflects average glycemic control over the preceding 8 to 12 weeks. An HbA1c threshold of 6.5% or higher meets diagnostic criteria for diabetes mellitus, whereas values between 5.7% and 6.4% identify individuals with prediabetes.",
+    "category": "Endocrinology"
+  },
+  {
+    "chunk_id": "MED_CHUNK_8",
+    "document_id": "DOC_CARDIO_002",
+    "page_number": 2,
+    "topic": "cardiovascular health",
+    "text": "Atherosclerotic cardiovascular disease (ASCVD) initiates with low-density lipoprotein (LDL) accumulation within the subendothelial space of coronary arteries, triggering localized inflammatory macrophage foam-cell formation and fibrous plaque development.",
+    "category": "Cardiology"
+  },
+  {
+    "chunk_id": "MED_CHUNK_9",
+    "document_id": "DOC_PULM_002",
+    "page_number": 2,
+    "topic": "asthma",
+    "text": "Inhaled corticosteroids (ICS) constitute first-line controller pharmacotherapy for persistent asthma, attenuating airway mucosal inflammation, reducing bronchial hyperreactivity, and lowering the frequency of acute asthma exacerbations.",
+    "category": "Pulmonology"
+  },
+  {
+    "chunk_id": "MED_CHUNK_10",
+    "document_id": "DOC_NEPHRO_002",
+    "page_number": 2,
+    "topic": "kidney disease",
+    "text": "Persistent microalbuminuria, defined as an elevated urinary albumin-to-creatinine ratio (UACR between 30 and 300 mg/g), serves as an early clinical biomarker of glomerular endothelial dysfunction and progressive diabetic nephropathy.",
+    "category": "Nephrology"
+  },
+  {
+    "chunk_id": "MED_CHUNK_11",
+    "document_id": "DOC_PHARM_002",
+    "page_number": 2,
+    "topic": "pharmacology",
+    "text": "Angiotensin-converting enzyme (ACE) inhibitors, such as Lisinopril, inhibit angiotensin II synthesis, attenuating efferent arteriolar vasoconstriction, lowering intraglomerular hydrostatic pressure, and providing documented renoprotective benefits in proteinuria.",
+    "category": "Cardiovascular Pharmacology"
+  },
+  {
+    "chunk_id": "MED_CHUNK_12",
+    "document_id": "DOC_PREV_002",
+    "page_number": 2,
+    "topic": "general preventive health",
+    "text": "Routine preventive health screenings in adults include periodic lipid panel profiling, fasting blood glucose monitoring, blood pressure checks, and colorectal cancer screening beginning at age 45 for average-risk individuals to reduce premature mortality.",
+    "category": "Preventive Medicine"
+  },
+  {
+    "chunk_id": "MED_CHUNK_13",
+    "document_id": "DOC_NUTR_002",
+    "page_number": 2,
+    "topic": "nutrition",
+    "text": "Restricting dietary intake of ultra-processed foods rich in refined sugars, trans fatty acids, and saturated fats lowers systemic pro-inflammatory biomarkers, mitigates hepatic steatosis, and reduces insulin resistance.",
+    "category": "Clinical Nutrition"
+  },
+  {
+    "chunk_id": "MED_CHUNK_14",
+    "document_id": "DOC_CARDIO_003",
+    "page_number": 3,
+    "topic": "cardiovascular health",
+    "text": "Heart failure with preserved ejection fraction (HFpEF) is characterized by impaired left ventricular active relaxation and increased myocardial passive stiffness, presenting with exertional dyspnea, elevated natriuretic peptides (NT-proBNP), and peripheral edema.",
+    "category": "Cardiology"
+  },
+  {
+    "chunk_id": "MED_CHUNK_15",
+    "document_id": "DOC_PULM_003",
+    "page_number": 3,
+    "topic": "asthma",
+    "text": "Short-acting beta-2 agonists (SABA), such as Albuterol, provide rapid bronchodilation during acute bronchospasm by stimulating adenylate cyclase and relaxing airway smooth muscle within minutes of inhalation.",
+    "category": "Pulmonology"
+  }
+]

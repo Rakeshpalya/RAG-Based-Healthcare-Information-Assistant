@@ -1,0 +1,52 @@
+[
+  {
+    "id": "ANS_001",
+    "question": "What blood pressure threshold defines arterial hypertension?",
+    "retrieved_sources": [
+      {
+        "source_index": 1,
+        "chunk_id": "MED_CHUNK_0",
+        "document_id": "DOC_CARDIO_001",
+        "page_number": 1,
+        "text": "Hypertension is a chronic medical condition in which systemic arterial blood pressure remains persistently elevated above 130/80 mmHg."
+      }
+    ],
+    "expected_grounded_facts": [
+      "Persistently elevated above 130/80 mmHg"
+    ],
+    "expected_source_ids": ["MED_CHUNK_0"],
+    "sample_valid_answer": "According to the medical evidence [Source 1], arterial hypertension is diagnosed when systemic arterial blood pressure remains persistently elevated above 130/80 mmHg.",
+    "sample_hallucinated_citation_answer": "According to medical evidence [Source 4], hypertension is defined as blood pressure above 130/80 mmHg.",
+    "sample_missing_citation_answer": "Hypertension is defined as blood pressure above 130/80 mmHg."
+  },
+  {
+    "id": "ANS_002",
+    "question": "What is the recommended aerobic exercise duration for vascular health?",
+    "retrieved_sources": [
+      {
+        "source_index": 1,
+        "chunk_id": "MED_CHUNK_3",
+        "document_id": "DOC_PREV_001",
+        "page_number": 1,
+        "text": "Engaging in regular moderate-intensity aerobic physical activity for at least 150 minutes per week improves myocardial perfusion, enhances peripheral insulin sensitivity, and reduces resting systolic blood pressure."
+      }
+    ],
+    "expected_grounded_facts": [
+      "At least 150 minutes per week of moderate-intensity aerobic activity"
+    ],
+    "expected_source_ids": ["MED_CHUNK_3"],
+    "sample_valid_answer": "Clinical guidelines recommend engaging in at least 150 minutes per week of moderate-intensity aerobic exercise [Source 1] to enhance vascular elasticity and lower systolic blood pressure.",
+    "sample_hallucinated_citation_answer": "You should exercise 150 minutes weekly [Source 9].",
+    "sample_missing_citation_answer": "Exercise 150 minutes weekly."
+  },
+  {
+    "id": "ANS_003",
+    "question": "What are the common symptoms of acute neurological stroke?",
+    "retrieved_sources": [],
+    "expected_grounded_facts": [],
+    "expected_source_ids": [],
+    "sample_valid_answer": "The available medical documents do not contain information to answer this question. Please consult a qualified healthcare provider or emergency medical services.",
+    "sample_hallucinated_citation_answer": "Stroke causes sudden numbness and slurred speech [Source 1].",
+    "sample_missing_citation_answer": "Stroke presents with facial drooping and hemiparesis."
+  }
+]

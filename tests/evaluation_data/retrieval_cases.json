@@ -1,0 +1,82 @@
+[
+  {
+    "id": "RET_01",
+    "query": "What are the common risk factors for hypertension according to the synthetic hypertension document?",
+    "query_type": "factual",
+    "topic": "Hypertension",
+    "expected_document_ids": ["synthetic_hypertension_test.pdf", "HealthAI_RAG_Test_Document.pdf"],
+    "expected_chunk_ids": ["chunk_0", "chunk_1"],
+    "expected_sufficiency": true,
+    "expected_min_score": 0.50
+  },
+  {
+    "id": "RET_02",
+    "query": "What is the recommended starting dose of amlodipine for stage 2 hypertension?",
+    "query_type": "factual_medication",
+    "topic": "Cardiology",
+    "expected_document_ids": ["hypertension_summary.pdf", "cardio.pdf"],
+    "expected_chunk_ids": ["chunk_0"],
+    "expected_sufficiency": true,
+    "expected_min_score": 0.45
+  },
+  {
+    "id": "RET_03",
+    "query": "What are the clinical trial results for metformin in Type 2 Diabetes patients?",
+    "query_type": "trial_evidence",
+    "topic": "Endocrinology",
+    "expected_document_ids": ["trial_report.pdf"],
+    "expected_chunk_ids": ["chunk_0"],
+    "expected_sufficiency": true,
+    "expected_min_score": 0.40
+  },
+  {
+    "id": "RET_04",
+    "query": "What pulmonary function test findings characterize asthma exacerbation?",
+    "query_type": "diagnostic",
+    "topic": "Pulmonology",
+    "expected_document_ids": ["asthma.pdf"],
+    "expected_chunk_ids": ["chunk_0"],
+    "expected_sufficiency": true,
+    "expected_min_score": 0.40
+  },
+  {
+    "id": "RET_05",
+    "query": "What histological features are described in the oncology pathology report?",
+    "query_type": "pathology",
+    "topic": "Oncology",
+    "expected_document_ids": ["onco_pathology.pdf"],
+    "expected_chunk_ids": ["chunk_0"],
+    "expected_sufficiency": true,
+    "expected_min_score": 0.40
+  },
+  {
+    "id": "RET_06",
+    "query": "What was the orbital velocity of the Voyager 1 spacecraft during Jupiter flyby?",
+    "query_type": "out_of_domain",
+    "topic": "Astronomy",
+    "expected_document_ids": [],
+    "expected_chunk_ids": [],
+    "expected_sufficiency": false,
+    "expected_min_score": 0.0
+  },
+  {
+    "id": "RET_07",
+    "query": "How to make a classic Italian sourdough pizza crust from scratch?",
+    "query_type": "out_of_domain",
+    "topic": "Culinary",
+    "expected_document_ids": [],
+    "expected_chunk_ids": [],
+    "expected_sufficiency": false,
+    "expected_min_score": 0.0
+  },
+  {
+    "id": "RET_08",
+    "query": "What are the latest clinical protocols for treating advanced Erdheim-Chester disease?",
+    "query_type": "rare_condition_insufficient",
+    "topic": "Rare Diseases",
+    "expected_document_ids": [],
+    "expected_chunk_ids": [],
+    "expected_sufficiency": false,
+    "expected_min_score": 0.0
+  }
+]

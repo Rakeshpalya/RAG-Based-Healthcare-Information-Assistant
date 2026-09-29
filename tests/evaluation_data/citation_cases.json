@@ -1,0 +1,91 @@
+[
+  {
+    "id": "CIT_01",
+    "description": "Valid single citation matching evidence source",
+    "answer": "Hypertension is characterized by persistent elevation of arterial blood pressure above normal thresholds [Source 1].",
+    "sources": [
+      {
+        "source_id": 1,
+        "document_name": "cardio.pdf",
+        "document_id": "DOC_CARDIO_01",
+        "page_number": 1,
+        "text": "Hypertension is defined as persistent elevation of arterial blood pressure above 130/80 mmHg."
+      }
+    ],
+    "expected_valid": true,
+    "expected_citations": [1],
+    "expected_invalid_citations": [],
+    "expected_missing_citations": false
+  },
+  {
+    "id": "CIT_02",
+    "description": "Missing citation on factual medical assertion",
+    "answer": "Amlodipine 5 mg daily is prescribed for stage 2 essential hypertension.",
+    "sources": [
+      {
+        "source_id": 1,
+        "document_name": "hypertension_summary.pdf",
+        "document_id": "DOC_HTN_01",
+        "page_number": 1,
+        "text": "TREATMENT PLAN: Prescribed Amlodipine 5mg daily and low-sodium diet for stage 2 essential hypertension."
+      }
+    ],
+    "expected_valid": false,
+    "expected_citations": [],
+    "expected_invalid_citations": [],
+    "expected_missing_citations": true
+  },
+  {
+    "id": "CIT_03",
+    "description": "Invalid citation index referencing non-existent source",
+    "answer": "Metformin reduces hepatic glucose production and improves insulin sensitivity [Source 3].",
+    "sources": [
+      {
+        "source_id": 1,
+        "document_name": "trial_report.pdf",
+        "document_id": "DOC_TRIAL_01",
+        "page_number": 1,
+        "text": "Metformin reduces hepatic glucose output and improves peripheral insulin sensitivity."
+      }
+    ],
+    "expected_valid": false,
+    "expected_citations": [3],
+    "expected_invalid_citations": [3],
+    "expected_missing_citations": false
+  },
+  {
+    "id": "CIT_04",
+    "description": "Valid multi-source citation on compound clinical sentence",
+    "answer": "Asthma triggers include environmental allergens [Source 1] while bronchodilators provide acute relief [Source 2].",
+    "sources": [
+      {
+        "source_id": 1,
+        "document_name": "asthma.pdf",
+        "document_id": "DOC_ASTHMA_01",
+        "page_number": 1,
+        "text": "Asthma exacerbations are frequently triggered by environmental aeroallergens and cold air."
+      },
+      {
+        "source_id": 2,
+        "document_name": "pulm_guide.pdf",
+        "document_id": "DOC_PULM_02",
+        "page_number": 2,
+        "text": "Short-acting beta-2 agonist bronchodilators provide rapid relief for acute bronchospasm."
+      }
+    ],
+    "expected_valid": true,
+    "expected_citations": [1, 2],
+    "expected_invalid_citations": [],
+    "expected_missing_citations": false
+  },
+  {
+    "id": "CIT_05",
+    "description": "Safe refusal on insufficient evidence requires no citations",
+    "answer": "The provided medical reference documents do not contain information regarding this inquiry.",
+    "sources": [],
+    "expected_valid": true,
+    "expected_citations": [],
+    "expected_invalid_citations": [],
+    "expected_missing_citations": false
+  }
+]

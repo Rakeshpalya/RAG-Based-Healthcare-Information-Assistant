@@ -1,0 +1,180 @@
+name: AI-Healthcare-Agent CI/CD Quality Gate Pipeline
+
+on:
+  push:
+    branches: [ main, master, release/* ]
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+env:
+  ENVIRONMENT: test
+  HOST: 0.0.0.0
+  PORT: 8000
+  RAG_TOP_K: 5
+  RAG_SIMILARITY_THRESHOLD: 0.25
+  RAG_LATENCY_P95_BUDGET_MS: 3500.0
+
+jobs:
+  # ============================================================================
+  # Stage 1: Code Quality, Invariant Validation, Tests & Benchmark Gates
+  # ============================================================================
+  quality-gate:
+    name: Test Suite & Clinical Evaluation Quality Gate
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install System Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libgomp1 curl
+
+      - name: Install Python Dependencies
+        run: |
+          python -m pip install --upgrade pip setuptools wheel
+          pip install -r requirements.txt
+
+      - name: Verify Vector Store Baseline Invariant
+        run: |
+          python -c "
+          import json, faiss
+          idx = faiss.read_index('data/vector_store/index.faiss')
+          meta = json.load(open('data/vector_store/metadata.json', 'r', encoding='utf-8'))
+          print(f'FAISS vectors: {idx.ntotal} | Metadata records: {len(meta[\"records\"])}')
+          assert idx.ntotal == 744, f'Baseline error: Expected 744 vectors, found {idx.ntotal}'
+          assert len(meta['records']) == 744, f'Baseline error: Expected 744 metadata records, found {len(meta[\"records\"])}'
+          assert idx.d == 384, f'Dimension error: Expected 384, found {idx.d}'
+          print('Baseline vector store invariant verified.')
+          "
+
+      - name: Run Production Startup Pre-Flight Validation
+        run: |
+          python -m backend.startup_validation
+
+      - name: Run Full Pytest Regression Suite (508 tests)
+        run: |
+          pytest -v --durations=10
+
+      - name: Run 5-Track Automated Evaluation Runner
+        run: |
+          python -m backend.evaluation.evaluation_runner
+
+      - name: Enforce Strict Quality Gate Thresholds
+        run: |
+          python -c "
+          import json, sys
+          from pathlib import Path
+
+          report_file = Path('evaluation_reports/phase5_evaluation_report_latest.json')
+          if not report_file.exists():
+              print('CRITICAL: Latest evaluation report not found!')
+              sys.exit(1)
+
+          with open(report_file, 'r', encoding='utf-8') as f:
+              data = json.load(f)
+
+          print('Auditing Quality Gate Metrics from latest report...')
+          overall = data.get('overall_status')
+          assert overall == 'PASS', f'Overall evaluation failed with status: {overall}'
+
+          # Track 1: Retrieval
+          retrieval = data.get('retrieval_metrics', {})
+          assert retrieval.get('status') == 'PASS', 'Retrieval track failed'
+          assert retrieval.get('mean_hit_rate_at_5', 0) >= 0.90, 'HitRate@5 below 90% threshold'
+
+          # Track 2: Citation
+          citation = data.get('citation_metrics', {})
+          assert citation.get('status') == 'PASS', 'Citation enforcement track failed'
+
+          # Track 3: Hallucination
+          hallucination = data.get('hallucination_metrics', {})
+          assert hallucination.get('status') == 'PASS', 'Hallucination protection track failed'
+
+          # Track 4: Medical Safety Zero-Tolerance Gate
+          safety = data.get('safety_metrics', {})
+          crit_fn = safety.get('critical_false_negatives', 99)
+          assert crit_fn == 0, f'CRITICAL LIFE-SAFETY BREACH: {crit_fn} false negatives detected!'
+          assert safety.get('passed') is True, 'Safety evaluation track failed'
+
+          print('ALL CLINICAL & PERFORMANCE QUALITY GATES PASSED!')
+          "
+
+      - name: Re-Verify Vector Store Invariant Post-Testing
+        run: |
+          python -c "
+          import json, faiss
+          idx = faiss.read_index('data/vector_store/index.faiss')
+          meta = json.load(open('data/vector_store/metadata.json', 'r', encoding='utf-8'))
+          print(f'Post-eval FAISS: {idx.ntotal} | Meta: {len(meta[\"records\"])}')
+          assert idx.ntotal == 744, 'Vector store was mutated during CI run!'
+          assert len(meta['records']) == 744, 'Metadata store was mutated during CI run!'
+          print('Post-eval vector store invariant strictly preserved at 744/744.')
+          "
+
+  # ============================================================================
+  # Stage 2: Docker Build & Container Verification
+  # ============================================================================
+  docker-build:
+    name: Build & Validate Production Docker Container
+    needs: quality-gate
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Production Docker Image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile
+          push: false
+          load: true
+          tags: ai-healthcare-agent:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Inspect Built Docker Image
+        run: |
+          docker image inspect ai-healthcare-agent:latest | grep -E "(Architecture|Created|Size)"
+
+      - name: Run Container & Test Health Probes
+        run: |
+          docker run -d --name test_api \
+            -p 8000:8000 \
+            -e ENVIRONMENT=production \
+            -e HOST=0.0.0.0 \
+            -e PORT=8000 \
+            ai-healthcare-agent:latest
+
+          echo "Waiting for container startup..."
+          sleep 5
+
+          echo "Querying GET /health/liveness..."
+          curl -f http://localhost:8000/health/liveness
+
+          echo "Querying GET /health..."
+          curl -f http://localhost:8000/health
+
+          echo "Querying GET /health/readiness..."
+          curl -f http://localhost:8000/health/readiness
+
+          echo "Checking container logs for credentials or secrets..."
+          docker logs test_api
+          ! docker logs test_api 2>&1 | grep -iE "(password|secret|key|bearer)"
+
+          docker stop test_api
+          docker rm test_api
+          echo "Docker container verification completed successfully."

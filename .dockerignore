@@ -1,0 +1,57 @@
+# Git & Version Control
+.git
+.gitignore
+.gitattributes
+
+# Environment & Local Secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.cert
+
+# Python Cache & Bytecode
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Virtual Environments
+venv/
+env/
+ENV/
+.venv/
+
+# Testing & Coverage
+.pytest_cache/
+.coverage
+htmlcov/
+tests/
+test_*.py
+
+# IDE & Editor Files
+.vscode/
+.idea/
+.gemini/
+*.swp
+*.swo
+*~
+
+# Temporary & Working Files
+tmp/
+scratch/
+logs/
+evaluation_reports/
+*.log
+
+# Streamlit Local Cache
+.streamlit/
+
+# Documents & Data (Preserve ONLY data/vector_store/)
+data/documents/
+data/*.db
+data/*.sqlite*
+!data/vector_store/
+!data/vector_store/**

@@ -1,0 +1,93 @@
+version: "3.8"
+
+services:
+  # ----------------------------------------------------------------------------
+  # PostgreSQL Relational Database
+  # ----------------------------------------------------------------------------
+  postgres:
+    image: postgres:16-alpine
+    container_name: ai_healthcare_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-ai_healthcare}
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 1024M
+        reservations:
+          cpus: "0.2"
+          memory: 256M
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d ai_healthcare"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - healthcare_network
+
+  # ----------------------------------------------------------------------------
+  # AI-Healthcare-Agent FastAPI Backend & RAG Engine
+  # ----------------------------------------------------------------------------
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: ai_healthcare_api
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "${PORT:-8000}:8000"
+    env_file:
+      - .env
+    environment:
+      - ENVIRONMENT=${ENVIRONMENT:-production}
+      - HOST=0.0.0.0
+      - PORT=8000
+      - DATABASE_URL=${DATABASE_URL:-postgresql://postgres:postgres@postgres:5432/ai_healthcare}
+      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
+      - GEMINI_MODEL=${GEMINI_MODEL:-gemini-3.5-flash-lite}
+      - GEMINI_TEMPERATURE=${GEMINI_TEMPERATURE:-0.2}
+      - RAG_TOP_K=${RAG_TOP_K:-5}
+      - RAG_SIMILARITY_THRESHOLD=${RAG_SIMILARITY_THRESHOLD:-0.25}
+      - LOG_FORMAT=${LOG_FORMAT:-json}
+      - RAG_LATENCY_P95_BUDGET_MS=${RAG_LATENCY_P95_BUDGET_MS:-3500.0}
+    volumes:
+      # Mount vector store strictly as READ-ONLY (:ro) to enforce invariant
+      - ./data/vector_store:/app/data/vector_store:ro
+      # Mount persistent runtime directories
+      - ./evaluation_reports:/app/evaluation_reports
+      - ./logs:/app/logs
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 4096M
+        reservations:
+          cpus: "0.5"
+          memory: 1024M
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8000/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    networks:
+      - healthcare_network
+
+networks:
+  healthcare_network:
+    driver: bridge
+
+volumes:
+  postgres_data:
+    driver: local
