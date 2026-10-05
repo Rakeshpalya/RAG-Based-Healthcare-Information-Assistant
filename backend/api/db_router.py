@@ -10,6 +10,7 @@ from backend.database.schemas import (
     DocumentCreate,
     DocumentResponse,
     ConversationCreate,
+    ConversationUpdate,
     ConversationResponse,
     MessageCreate,
     MessageResponse,
@@ -80,12 +81,6 @@ def create_document(
     """Registers document metadata in the relational database assigned to the authenticated user."""
     # Prevent client from spoofing another user ID
     if doc_in.user_id is not None and doc_in.user_id != current_user.id:
-        target_user = UserRepository.get_by_id(db, doc_in.user_id)
-        if not target_user:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"User with ID {doc_in.user_id} not found.",
-            )
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Access denied: Cannot assign document to another user.",
@@ -136,6 +131,32 @@ def get_document(
             detail="Access denied: You do not have permission to access this document.",
         )
     return doc
+
+
+@router.delete(
+    "/documents/{document_id}",
+    status_code=status.HTTP_200_OK,
+    summary="Delete Document",
+)
+def delete_document(
+    document_id: int,
+    current_user: User = Depends(get_current_db_user),
+    db: Session = Depends(get_db),
+):
+    """Deletes a document record and its indexed chunks, strictly enforcing ownership isolation."""
+    doc = DocumentRepository.get_by_id(db, document_id)
+    if not doc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Document with ID {document_id} not found.",
+        )
+    if doc.user_id is not None and doc.user_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access denied: Cannot delete another user's document.",
+        )
+    success = DocumentRepository.delete(db, document_id)
+    return {"success": success, "message": "Document deleted successfully."}
 
 
 # ==============================================================================
@@ -240,6 +261,34 @@ def create_conversation_message(
             detail="Access denied: Cannot add messages to another user's conversation.",
         )
     return MessageRepository.create(db, conversation_id, msg_in)
+
+
+@router.patch(
+    "/conversations/{conversation_id}",
+    response_model=ConversationResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Rename Conversation Session",
+)
+def update_conversation(
+    conversation_id: int,
+    conv_in: ConversationUpdate,
+    current_user: User = Depends(get_current_db_user),
+    db: Session = Depends(get_db),
+):
+    """Updates the title of a conversation session strictly owned by the authenticated user."""
+    conv = ConversationRepository.get_by_id(db, conversation_id)
+    if not conv:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Conversation with ID {conversation_id} not found.",
+        )
+    if conv.user_id is not None and conv.user_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access denied: Cannot modify another user's conversation.",
+        )
+    updated = ConversationRepository.update_title(db, conversation_id, conv_in.title)
+    return updated
 
 
 @router.delete(

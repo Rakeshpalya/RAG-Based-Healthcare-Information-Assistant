@@ -82,6 +82,10 @@ class ConversationCreate(ConversationBase):
     pass
 
 
+class ConversationUpdate(BaseModel):
+    title: str = Field(..., min_length=1, max_length=200, description="New title for the conversation session.")
+
+
 class ConversationResponse(ConversationBase):
     id: int
     title: str

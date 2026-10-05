@@ -4,6 +4,7 @@ import time
 import asyncio
 from unittest.mock import MagicMock, patch
 from pathlib import Path
+import pytest
 
 # Ensure project root is in sys.path
 root_dir = Path(__file__).resolve().parent.parent
@@ -460,6 +461,202 @@ def run_gemini_rag_demo_and_benchmarks():
     print("2. Safe Fallback: If retrieval score < 0.25, Gemini is NOT called.")
     print("3. Independent Sources: Citations are tracked separately in the API response object.")
     print("===========================================================================\n")
+
+
+# ==============================================================================
+# Phase 3.1 Tests: GeminiService Direct Generation & Resilience (Step 13)
+# ==============================================================================
+
+def test_phase3_successful_generation():
+    """1. Successful generation via generate()."""
+    mock_client = MagicMock()
+    mock_resp = MagicMock()
+    mock_resp.text = "Blood pressure is the force of circulating blood against the walls of arteries."
+    mock_client.models.generate_content.return_value = mock_resp
+
+    service = GeminiService(api_key="test-key-phase3", model="gemini-3.5-flash-lite", temperature=0.0)
+    service.set_client(mock_client)
+
+    result = service.generate(
+        prompt="Explain blood pressure concisely.",
+        temperature=0.0,
+        max_output_tokens=1024
+    )
+
+    assert result == "Blood pressure is the force of circulating blood against the walls of arteries."
+    assert mock_client.models.generate_content.call_count == 1
+    call_kwargs = mock_client.models.generate_content.call_args.kwargs
+    assert call_kwargs["model"] == "gemini-3.5-flash-lite"
+    assert call_kwargs["contents"] == "Explain blood pressure concisely."
+    assert call_kwargs["config"].temperature == 0.0
+    assert call_kwargs["config"].max_output_tokens == 1024
+
+
+def test_phase3_empty_response():
+    """2. Empty response handling raises clean GeminiServiceError."""
+    mock_client = MagicMock()
+    mock_resp = MagicMock()
+    mock_resp.text = ""
+    mock_resp.candidates = []
+    mock_client.models.generate_content.return_value = mock_resp
+
+    service = GeminiService(api_key="test-key-phase3")
+    service.set_client(mock_client)
+
+    with pytest.raises(GeminiServiceError, match="Gemini returned an empty response"):
+        service.generate("What is hypertension?")
+
+
+def test_phase3_timeout_handling():
+    """3. Timeout handling raises clean GeminiServiceError without leaking tracebacks."""
+    mock_client = MagicMock()
+    mock_client.models.generate_content.side_effect = Exception("504 Gateway Timeout: Deadline exceeded")
+
+    service = GeminiService(api_key="test-key-phase3")
+    service.INITIAL_RETRY_DELAY_SEC = 0.001
+    service.set_client(mock_client)
+
+    with pytest.raises(GeminiServiceError) as exc_info:
+        service.generate("What is hypertension?")
+
+    assert "timed out" in str(exc_info.value) or "temporarily unavailable" in str(exc_info.value) or "Deadline exceeded" in str(exc_info.value)
+
+
+def test_phase3_api_error_handling():
+    """4. API error handling cleanly captures provider errors."""
+    from google.genai.errors import APIError
+
+    mock_client = MagicMock()
+    mock_client.models.generate_content.side_effect = APIError(
+        400,
+        {"error": {"message": "Invalid argument: prompt exceeds token limit"}}
+    )
+
+    service = GeminiService(api_key="test-key-phase3")
+    service.set_client(mock_client)
+
+    with pytest.raises(GeminiServiceError) as exc_info:
+        service.generate("A very long prompt")
+
+    assert "Invalid argument" in str(exc_info.value) or "Gemini generation failed" in str(exc_info.value)
+
+
+def test_phase3_missing_api_key():
+    """5. Missing API key raises clean exception."""
+    GeminiService.set_client(None)
+    orig_env = os.environ.get("GEMINI_API_KEY")
+    orig_setting = Settings.GEMINI_API_KEY
+    try:
+        os.environ["GEMINI_API_KEY"] = ""
+        Settings.GEMINI_API_KEY = ""
+        service = GeminiService(api_key=None)
+        with pytest.raises((ValueError, GeminiServiceError), match="Gemini API key is not configured"):
+            service.get_client()
+    finally:
+        if orig_env is not None:
+            os.environ["GEMINI_API_KEY"] = orig_env
+        else:
+            os.environ.pop("GEMINI_API_KEY", None)
+        Settings.GEMINI_API_KEY = orig_setting
+        GeminiService.set_client(None)
+
+
+def test_phase3_provider_exception():
+    """6. Provider exception is captured and converted to GeminiServiceError."""
+    mock_client = MagicMock()
+    mock_client.models.generate_content.side_effect = RuntimeError("Internal connection reset by peer")
+
+    service = GeminiService(api_key="test-key-phase3")
+    service.INITIAL_RETRY_DELAY_SEC = 0.001
+    service.set_client(mock_client)
+
+    with pytest.raises(GeminiServiceError, match="Gemini generation failed across all models"):
+        service.generate("What is hypertension?")
+
+
+def test_phase3_model_configuration():
+    """7. Model configuration can be set via init and overridden per call."""
+    mock_client = MagicMock()
+    mock_resp = MagicMock()
+    mock_resp.text = "Configured response"
+    mock_client.models.generate_content.return_value = mock_resp
+
+    service = GeminiService(api_key="test-key-phase3", model="gemini-2.5-flash")
+    service.set_client(mock_client)
+
+    # 1. Uses init model
+    res1 = service.generate("Prompt 1")
+    assert res1 == "Configured response"
+    assert mock_client.models.generate_content.call_args.kwargs["model"] == "gemini-2.5-flash"
+
+    # 2. Overrides model per call
+    res2 = service.generate("Prompt 2", model="gemini-flash-latest")
+    assert res2 == "Configured response"
+    assert mock_client.models.generate_content.call_args.kwargs["model"] == "gemini-flash-latest"
+
+
+def test_phase3_temperature_configuration():
+    """8. Temperature defaults to 0.0 for deterministic output and can be customized."""
+    mock_client = MagicMock()
+    mock_resp = MagicMock()
+    mock_resp.text = "Deterministic response"
+    mock_client.models.generate_content.return_value = mock_resp
+
+    service = GeminiService(api_key="test-key-phase3")
+    service.set_client(mock_client)
+
+    # Default temperature in generate is 0.0
+    service.generate("Prompt")
+    config = mock_client.models.generate_content.call_args.kwargs["config"]
+    assert config.temperature == 0.0
+
+    # Custom override
+    service.generate("Prompt", temperature=0.3)
+    config2 = mock_client.models.generate_content.call_args.kwargs["config"]
+    assert config2.temperature == 0.3
+
+
+def test_phase3_max_token_configuration():
+    """9. Max output token limit is enforced and configurable."""
+    mock_client = MagicMock()
+    mock_resp = MagicMock()
+    mock_resp.text = "Bounded response"
+    mock_client.models.generate_content.return_value = mock_resp
+
+    service = GeminiService(api_key="test-key-phase3")
+    service.set_client(mock_client)
+
+    # Default max_output_tokens is 1024
+    service.generate("Prompt")
+    config = mock_client.models.generate_content.call_args.kwargs["config"]
+    assert config.max_output_tokens == 1024
+
+    # Custom override
+    service.generate("Prompt", max_output_tokens=256)
+    config2 = mock_client.models.generate_content.call_args.kwargs["config"]
+    assert config2.max_output_tokens == 256
+
+
+def test_phase3_secret_leakage_prevention():
+    """10. Secret/API-key leakage prevention: keys are never exposed in exceptions or logs."""
+    sensitive_api_key = "AIzaSyTestHealthcareSecretKey987654"
+    mock_client = MagicMock()
+    mock_client.models.generate_content.side_effect = Exception(
+        f"Unauthorized access for api_key={sensitive_api_key}: invalid permissions"
+    )
+
+    service = GeminiService(api_key=sensitive_api_key)
+    service.INITIAL_RETRY_DELAY_SEC = 0.001
+    service.set_client(mock_client)
+
+    with pytest.raises(GeminiServiceError) as exc_info:
+        service.generate("Test prompt")
+
+    err_text = str(exc_info.value)
+    # The actual sensitive key MUST NOT be present
+    assert sensitive_api_key not in err_text
+    # Redacted replacement MUST be present
+    assert "[REDACTED_API_KEY]" in err_text
 
 
 if __name__ == "__main__":

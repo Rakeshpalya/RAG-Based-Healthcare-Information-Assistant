@@ -176,8 +176,8 @@ def render_history_page(set_page_fn: Optional[Callable[[str], None]] = None):
                 unsafe_allow_html=True
             )
 
-            # Action Buttons: Resume Session and Delete Session
-            col_act_resume, col_act_del = st.columns([3, 1])
+            # Action Buttons: Resume Session, Rename, and Delete Session
+            col_act_resume, col_act_rename, col_act_del = st.columns([3, 1.2, 1])
             with col_act_resume:
                 if st.button("💬 Resume Session in Chat →", key=f"btn_resume_chat_{active_id}", type="primary", use_container_width=True):
                     hist_messages = api_client.get_conversation_messages(active_id)
@@ -198,6 +198,11 @@ def render_history_page(set_page_fn: Optional[Callable[[str], None]] = None):
                         st.session_state.current_page = "Research Chat"
                     st.rerun()
 
+            with col_act_rename:
+                if st.button("✏️ Rename", key=f"btn_rename_{active_id}", type="secondary", use_container_width=True, help="Rename conversation"):
+                    st.session_state[f"show_rename_{active_id}"] = not st.session_state.get(f"show_rename_{active_id}", False)
+                    st.rerun()
+
             with col_act_del:
                 if st.button("🗑️ Delete", key=f"btn_delete_active_{active_id}", type="secondary", use_container_width=True, help="Delete this conversation"):
                     del_res = api_client.delete_conversation(active_id)
@@ -208,6 +213,26 @@ def render_history_page(set_page_fn: Optional[Callable[[str], None]] = None):
                         st.rerun()
                     else:
                         st.error(del_res.get("error", "Failed to delete conversation."))
+
+            # Inline Rename Form
+            if st.session_state.get(f"show_rename_{active_id}", False):
+                with st.form(f"form_rename_{active_id}", clear_on_submit=False):
+                    new_t = st.text_input("New Conversation Title", value=conv_title, key=f"input_rename_{active_id}")
+                    c_save, c_cancel = st.columns(2)
+                    with c_save:
+                        if st.form_submit_button("Save Title", type="primary", use_container_width=True):
+                            if new_t.strip():
+                                r_res = api_client.rename_conversation(active_id, new_t.strip())
+                                st.session_state[f"show_rename_{active_id}"] = False
+                                if r_res.get("success"):
+                                    st.success("Conversation renamed.")
+                                else:
+                                    st.error(r_res.get("error", "Failed to rename."))
+                                st.rerun()
+                    with c_cancel:
+                        if st.form_submit_button("Cancel", use_container_width=True):
+                            st.session_state[f"show_rename_{active_id}"] = False
+                            st.rerun()
 
             st.markdown("<div style='height: 12px;'></div>", unsafe_allow_html=True)
 

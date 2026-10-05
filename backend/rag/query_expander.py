@@ -8,6 +8,7 @@ Includes strict clinical subject anchoring to prevent cross-condition contaminat
 
 import re
 from typing import List, Dict, Any, Optional, Set
+from backend.rag.query_expansion import normalize_medical_query
 
 
 class MedicalQueryExpander:
@@ -175,17 +176,23 @@ class MedicalQueryExpander:
 
     @classmethod
     def has_medication_intent(cls, query: str) -> bool:
-        """Returns True if the query explicitly asks about medications, drugs, or dosages."""
+        """
+        Returns True if the query explicitly asks about medications, drugs, or dosages.
+        Guarantees that negative pharmaceutical phrases (e.g. 'non-medication', 'without medication')
+        do NOT trigger medication intent.
+        """
         if not query:
             return False
-        return bool(cls.MEDICATION_INTENT_PATTERN.search(query))
+        res = normalize_medical_query(query)
+        return res.is_medication or res.is_mixed
 
     @classmethod
     def get_expanded_terms(cls, query: str) -> List[str]:
         """
         Extracts a deduplicated list of clinical expansion terms matching the query.
-        Separates condition-level synonyms from medication-level terms.
+        Separates condition-level synonyms from medication-level terms and lifestyle terms.
         Medication terms are ONLY added when explicit medication intent is detected.
+        Lifestyle terms are added when lifestyle / non-pharmacological intent is detected.
         """
         if not query or not query.strip():
             return []
@@ -202,8 +209,17 @@ class MedicalQueryExpander:
                         seen.add(term_norm)
                         expanded.append(term.strip())
 
-        # Intent-driven expansion: add specific medications ONLY when medication intent is present
-        if cls.has_medication_intent(query):
+        # Phase 2E.2: Intent-driven expansion for lifestyle & non-pharmacological measures
+        norm_res = normalize_medical_query(query)
+        if norm_res.is_lifestyle or norm_res.is_mixed:
+            for term in norm_res.expansion_terms:
+                term_norm = term.strip().lower()
+                if term_norm not in seen and term_norm not in q_lower:
+                    seen.add(term_norm)
+                    expanded.append(term.strip())
+
+        # Intent-driven expansion: add specific medications ONLY when affirmative medication intent is present
+        if norm_res.is_medication or norm_res.is_mixed:
             if any(term in q_lower for term in ["glycemic", "diabetes", "blood sugar", "glucose"]):
                 for med in ["metformin", "insulin"]:
                     if med not in seen and med not in q_lower:
@@ -274,8 +290,14 @@ class MedicalQueryExpander:
         if not query or not query.strip():
             return False
 
+        has_med = cls.has_medication_intent(query)
         q_lower = query.lower()
-        matched_aspects = sum(1 for _, pat in cls.ASPECT_PATTERNS if pat.search(q_lower))
+        matched_aspects = 0
+        for name, pat in cls.ASPECT_PATTERNS:
+            if name == "medications" and not has_med:
+                continue
+            if pat.search(q_lower):
+                matched_aspects += 1
         return matched_aspects >= 2
 
     @classmethod
@@ -351,8 +373,11 @@ class MedicalQueryExpander:
         if not primary_subject:
             return []
 
+        has_med = cls.has_medication_intent(query)
         sub_queries: List[str] = []
         for aspect_name, pat in cls.ASPECT_PATTERNS:
+            if aspect_name == "medications" and not has_med:
+                continue
             if pat.search(q_lower):
                 aspect_clean = aspect_name.replace("_", " ")
                 # Format focused sub-query

@@ -1,0 +1,52 @@
+{
+  "benchmark_timestamp": "2026-10-05T02:58:30Z",
+  "iterations": 500,
+  "total_duration_seconds": 0.685,
+  "throughput_fusions_per_sec": 729.7,
+  "production_invariants": {
+    "faiss_vector_count": 744,
+    "metadata_record_count": 744,
+    "embedding_dimension": 384,
+    "invariants_satisfied": true
+  },
+  "latencies_ms": {
+    "end_to_end_fusion": {
+      "p50": 0.527,
+      "p95": 1.854,
+      "p99": 2.424,
+      "mean": 0.7,
+      "max": 3.058,
+      "min": 0.122
+    },
+    "deduplication_overhead": {
+      "p50": 0.05,
+      "p95": 0.149,
+      "p99": 0.189,
+      "mean": 0.069
+    },
+    "ranking_and_diversity": {
+      "p50": 0.083,
+      "p95": 0.224,
+      "p99": 0.335,
+      "mean": 0.11
+    },
+    "conflict_detection": {
+      "p50": 0.334,
+      "p95": 1.356,
+      "p99": 1.68,
+      "mean": 0.429
+    },
+    "evidence_coverage": {
+      "p50": 0.038,
+      "p95": 0.103,
+      "p99": 0.129,
+      "mean": 0.05
+    },
+    "context_construction": {
+      "p50": 0.007,
+      "p95": 0.022,
+      "p99": 0.032,
+      "mean": 0.009
+    }
+  }
+}

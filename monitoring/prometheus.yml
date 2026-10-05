@@ -1,0 +1,14 @@
+# Prometheus Configuration for AI-Healthcare-Agent (Phase 3.6)
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: "ai_healthcare_api"
+    metrics_path: "/metrics"
+    scheme: "http"
+    static_configs:
+      - targets: ["api:8000"]
+        labels:
+          service: "ai-healthcare-agent"
+          environment: "production"

@@ -1,0 +1,40 @@
+{
+  "benchmark": "Phase 6.8: Clinical Intelligence Orchestration & Auditability",
+  "timestamp": "2026-10-05T11:53:43Z",
+  "iterations": 250,
+  "successful_executions": 250,
+  "failures": 0,
+  "total_benchmark_time_seconds": 0.045,
+  "throughput_evaluations_per_second": 5606.0,
+  "orchestration_overhead_percentage": 0.082,
+  "latency_metrics": {
+    "orchestration_latency": {
+      "mean_ms": 0.137,
+      "p50_ms": 0.113,
+      "p95_ms": 0.241,
+      "p99_ms": 0.521,
+      "max_ms": 1.063,
+      "min_ms": 0.1
+    },
+    "total_execution_latency": {
+      "mean_ms": 138.176,
+      "p50_ms": 138.144,
+      "p95_ms": 154.659,
+      "p99_ms": 156.159,
+      "max_ms": 156.327,
+      "min_ms": 120.14
+    }
+  },
+  "target_compliance": {
+    "target_p95_ms": 2.5,
+    "actual_p95_ms": 0.241,
+    "passed": true
+  },
+  "invariants_verified": {
+    "faiss_vector_count": 744,
+    "metadata_record_count": 744,
+    "embedding_dimension": 384,
+    "embedding_model": "sentence-transformers/all-MiniLM-L6-v2",
+    "all_invariants_preserved": true
+  }
+}

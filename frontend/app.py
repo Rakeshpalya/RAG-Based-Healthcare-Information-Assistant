@@ -25,12 +25,14 @@ from frontend.components.navbar import (
     NAV_DOCUMENTS,
     NAV_CHAT,
     NAV_HISTORY,
+    NAV_SETTINGS,
 )
 from frontend.pages.auth import render_auth_page
 from frontend.pages.dashboard import render_dashboard_page
 from frontend.pages.documents import render_documents_page
 from frontend.pages.history import render_history_page
 from frontend.pages.chat import render_chat_page
+from frontend.pages.settings import render_settings_page
 
 # Configure Streamlit App Layout & Metadata (Clean SaaS full-width layout)
 st.set_page_config(
@@ -188,6 +190,8 @@ elif current == NAV_CHAT:
     render_chat_page()
 elif current == NAV_HISTORY:
     render_history_page(set_page_fn=set_page)
+elif current == NAV_SETTINGS:
+    render_settings_page(set_page_fn=set_page)
 else:
     render_dashboard_page(set_page_fn=set_page)
 

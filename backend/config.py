@@ -54,6 +54,8 @@ class Settings:
         "development"
     )
 
+    DEBUG: bool = os.getenv("DEBUG", "false").lower() in ("true", "1", "yes")
+
     HOST: str = os.getenv(
         "HOST",
         "127.0.0.1"
@@ -97,7 +99,31 @@ class Settings:
     )
 
     GEMINI_TEMPERATURE: float = float(
-        os.getenv("GEMINI_TEMPERATURE", "0.2")
+        os.getenv("GEMINI_TEMPERATURE", "0.0")
+    )
+
+    GEMINI_MAX_OUTPUT_TOKENS: int = int(
+        os.getenv("GEMINI_MAX_OUTPUT_TOKENS", "1024")
+    )
+
+    GEMINI_TIMEOUT_SECONDS: float = float(
+        os.getenv("GEMINI_TIMEOUT_SECONDS", "30.0")
+    )
+
+    # --------------------------------------------------------
+    # LLM Response Cache Settings (Phase 3.3)
+    # --------------------------------------------------------
+
+    LLM_CACHE_ENABLED: bool = os.getenv(
+        "LLM_CACHE_ENABLED", "true"
+    ).lower() in ("true", "1", "yes")
+
+    LLM_CACHE_TTL_SECONDS: int = int(
+        os.getenv("LLM_CACHE_TTL_SECONDS", "3600")
+    )
+
+    LLM_CACHE_MAX_ENTRIES: int = int(
+        os.getenv("LLM_CACHE_MAX_ENTRIES", "1000")
     )
 
     # --------------------------------------------------------
@@ -174,11 +200,30 @@ class Settings:
     )
 
     # --------------------------------------------------------
-    # Security & Rate Limiting Settings (Phase 8/9)
+    # Security & Rate Limiting Settings (Phase 8/9/3.4)
     # --------------------------------------------------------
 
     RATE_LIMIT_ENABLED: bool = os.getenv("RATE_LIMIT_ENABLED", "true").lower() in ("true", "1", "yes")
     RATE_LIMIT_PER_MINUTE: int = int(os.getenv("RATE_LIMIT_PER_MINUTE", "60"))
+    GENERAL_REQUESTS_PER_MINUTE: int = int(os.getenv("GENERAL_REQUESTS_PER_MINUTE", "30"))
+    STREAMING_REQUESTS_PER_MINUTE: int = int(os.getenv("STREAMING_REQUESTS_PER_MINUTE", "10"))
+    MAX_CONCURRENT_LLM_REQUESTS: int = int(os.getenv("MAX_CONCURRENT_LLM_REQUESTS", "10"))
+    REQUEST_TIMEOUT_SECONDS: float = float(os.getenv("REQUEST_TIMEOUT_SECONDS", "60.0"))
+    LLM_TIMEOUT_SECONDS: float = float(os.getenv("LLM_TIMEOUT_SECONDS", "30.0"))
+
+    # --------------------------------------------------------
+    # Redis Shared Infrastructure Settings (Phase 3.5)
+    # --------------------------------------------------------
+
+    REDIS_ENABLED: bool = os.getenv("REDIS_ENABLED", "false").lower() in ("true", "1", "yes")
+    REDIS_HOST: str = os.getenv("REDIS_HOST", "localhost")
+    REDIS_PORT: int = int(os.getenv("REDIS_PORT", "6379"))
+    REDIS_DB: int = int(os.getenv("REDIS_DB", "0"))
+    REDIS_PASSWORD: Optional[str] = os.getenv("REDIS_PASSWORD", None)
+    REDIS_SOCKET_TIMEOUT: float = float(os.getenv("REDIS_SOCKET_TIMEOUT", "2.0"))
+    REDIS_CONNECT_TIMEOUT: float = float(os.getenv("REDIS_CONNECT_TIMEOUT", "2.0"))
+    REDIS_MAX_CONNECTIONS: int = int(os.getenv("REDIS_MAX_CONNECTIONS", "20"))
+    REDIS_RETRY_ON_TIMEOUT: bool = os.getenv("REDIS_RETRY_ON_TIMEOUT", "true").lower() in ("true", "1", "yes")
 
     # ========================================================
     # Environment Detection Helpers
@@ -226,6 +271,8 @@ class Settings:
             "ENVIRONMENT",
             "development"
         )
+
+        cls.DEBUG = os.getenv("DEBUG", "false").lower() in ("true", "1", "yes")
 
         cls.HOST = os.getenv(
             "HOST",
@@ -283,7 +330,26 @@ class Settings:
         )
 
         cls.GEMINI_TEMPERATURE = float(
-            os.getenv("GEMINI_TEMPERATURE", "0.2")
+            os.getenv("GEMINI_TEMPERATURE", "0.0")
+        )
+
+        cls.GEMINI_MAX_OUTPUT_TOKENS = int(
+            os.getenv("GEMINI_MAX_OUTPUT_TOKENS", "1024")
+        )
+
+        cls.GEMINI_TIMEOUT_SECONDS = float(
+            os.getenv("GEMINI_TIMEOUT_SECONDS", "30.0")
+        )
+
+        # LLM Cache
+        cls.LLM_CACHE_ENABLED = os.getenv(
+            "LLM_CACHE_ENABLED", "true"
+        ).lower() in ("true", "1", "yes")
+        cls.LLM_CACHE_TTL_SECONDS = int(
+            os.getenv("LLM_CACHE_TTL_SECONDS", "3600")
+        )
+        cls.LLM_CACHE_MAX_ENTRIES = int(
+            os.getenv("LLM_CACHE_MAX_ENTRIES", "1000")
         )
 
         # OpenAI (for HealthAI Medical Chatbot)
@@ -323,9 +389,25 @@ class Settings:
             os.getenv("RAG_LATENCY_P95_BUDGET_MS", "3000.0")
         )
 
-        # Security
+        # Security & Rate Limiting (Phase 3.4)
         cls.RATE_LIMIT_ENABLED = os.getenv("RATE_LIMIT_ENABLED", "true").lower() in ("true", "1", "yes")
         cls.RATE_LIMIT_PER_MINUTE = int(os.getenv("RATE_LIMIT_PER_MINUTE", "60"))
+        cls.GENERAL_REQUESTS_PER_MINUTE = int(os.getenv("GENERAL_REQUESTS_PER_MINUTE", "30"))
+        cls.STREAMING_REQUESTS_PER_MINUTE = int(os.getenv("STREAMING_REQUESTS_PER_MINUTE", "10"))
+        cls.MAX_CONCURRENT_LLM_REQUESTS = int(os.getenv("MAX_CONCURRENT_LLM_REQUESTS", "10"))
+        cls.REQUEST_TIMEOUT_SECONDS = float(os.getenv("REQUEST_TIMEOUT_SECONDS", "60.0"))
+        cls.LLM_TIMEOUT_SECONDS = float(os.getenv("LLM_TIMEOUT_SECONDS", "30.0"))
+
+        # Redis Shared Infrastructure (Phase 3.5)
+        cls.REDIS_ENABLED = os.getenv("REDIS_ENABLED", "false").lower() in ("true", "1", "yes")
+        cls.REDIS_HOST = os.getenv("REDIS_HOST", "localhost")
+        cls.REDIS_PORT = int(os.getenv("REDIS_PORT", "6379"))
+        cls.REDIS_DB = int(os.getenv("REDIS_DB", "0"))
+        cls.REDIS_PASSWORD = os.getenv("REDIS_PASSWORD", None)
+        cls.REDIS_SOCKET_TIMEOUT = float(os.getenv("REDIS_SOCKET_TIMEOUT", "2.0"))
+        cls.REDIS_CONNECT_TIMEOUT = float(os.getenv("REDIS_CONNECT_TIMEOUT", "2.0"))
+        cls.REDIS_MAX_CONNECTIONS = int(os.getenv("REDIS_MAX_CONNECTIONS", "20"))
+        cls.REDIS_RETRY_ON_TIMEOUT = os.getenv("REDIS_RETRY_ON_TIMEOUT", "true").lower() in ("true", "1", "yes")
 
     # ========================================================
     # Gemini API Key Validation
@@ -406,13 +488,42 @@ class Settings:
             "gemini_api_key_configured": bool(os.environ.get("GEMINI_API_KEY", cls.GEMINI_API_KEY or "")),
             "gemini_masked_key": cls.get_masked_api_key(),
             "gemini_model": cls.GEMINI_MODEL,
+            "gemini_temperature": cls.GEMINI_TEMPERATURE,
+            "gemini_max_output_tokens": cls.GEMINI_MAX_OUTPUT_TOKENS,
+            "gemini_timeout_seconds": cls.GEMINI_TIMEOUT_SECONDS,
             "rag_top_k": cls.RAG_TOP_K,
             "rag_similarity_threshold": cls.RAG_SIMILARITY_THRESHOLD,
             "rag_latency_p95_budget_ms": cls.RAG_LATENCY_P95_BUDGET_MS,
             "database_url_masked": cls.get_masked_database_url(),
+            "llm_cache_enabled": cls.LLM_CACHE_ENABLED,
+            "llm_cache_ttl_seconds": cls.LLM_CACHE_TTL_SECONDS,
+            "llm_cache_max_entries": cls.LLM_CACHE_MAX_ENTRIES,
             "rate_limit_enabled": cls.RATE_LIMIT_ENABLED,
             "rate_limit_per_minute": cls.RATE_LIMIT_PER_MINUTE,
+            "redis_enabled": cls.REDIS_ENABLED,
+            "redis_host": cls.REDIS_HOST,
+            "redis_port": cls.REDIS_PORT,
+            "redis_db": cls.REDIS_DB,
+            "redis_password_configured": bool(cls.REDIS_PASSWORD),
+            "debug": cls.DEBUG,
         }
+
+    @classmethod
+    def reload_from_env(cls) -> None:
+        """Reload configuration values dynamically from os.environ."""
+        cls.GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+        cls.GEMINI_MODEL = os.getenv("GEMINI_MODEL", "gemini-3.5-flash-lite")
+        cls.GEMINI_TEMPERATURE = float(os.getenv("GEMINI_TEMPERATURE", "0.0"))
+        cls.GEMINI_MAX_OUTPUT_TOKENS = int(os.getenv("GEMINI_MAX_OUTPUT_TOKENS", "1024"))
+        cls.GEMINI_TIMEOUT_SECONDS = float(os.getenv("GEMINI_TIMEOUT_SECONDS", "30.0"))
+        cls.LLM_CACHE_ENABLED = os.getenv("LLM_CACHE_ENABLED", "true").lower() in ("true", "1", "yes")
+        cls.LLM_CACHE_TTL_SECONDS = int(os.getenv("LLM_CACHE_TTL_SECONDS", "3600"))
+        cls.LLM_CACHE_MAX_ENTRIES = int(os.getenv("LLM_CACHE_MAX_ENTRIES", "1000"))
+        cls.REDIS_ENABLED = os.getenv("REDIS_ENABLED", "false").lower() in ("true", "1", "yes")
+        cls.REDIS_HOST = os.getenv("REDIS_HOST", "localhost")
+        cls.REDIS_PORT = int(os.getenv("REDIS_PORT", "6379"))
+        cls.REDIS_DB = int(os.getenv("REDIS_DB", "0"))
+        cls.REDIS_PASSWORD = os.getenv("REDIS_PASSWORD", None)
 
     # ========================================================
     # Production Configuration Validation (Phase 9)
@@ -441,8 +552,16 @@ class Settings:
                    "AIza" in v_str or "sk-" in v_str:
                     errors.append(f"CRITICAL_SECURITY_LEAK: Secret detected in frontend variable '{k}'")
 
-        # In production mode, require essential credentials
+        # In production mode, require essential credentials and strict invariants
         if env == "production":
+            debug_val = os.getenv("DEBUG", "false").lower() in ("true", "1", "yes")
+            if debug_val:
+                errors.append("PRODUCTION_INVARIANT_VIOLATION: DEBUG mode must be disabled in production.")
+
+            safe_log = os.getenv("SAFE_LOG_MODE", "true").lower() in ("true", "1", "yes")
+            if not safe_log:
+                warnings.append("PRODUCTION_WARNING: SAFE_LOG_MODE should be enabled in production to protect PHI/PII.")
+
             api_key = os.environ.get("GEMINI_API_KEY", cls.GEMINI_API_KEY or "")
             if not api_key or not api_key.strip():
                 warnings.append("MISSING_CONFIGURATION: GEMINI_API_KEY is not set for production answer generation.")

@@ -17,6 +17,7 @@ Validates the 12 key recall requirements:
 """
 
 import pytest
+from typing import List, Dict, Any, Optional, Set, Union
 from unittest.mock import MagicMock, patch
 
 from backend.rag.query_expander import MedicalQueryExpander
@@ -302,3 +303,346 @@ def test_12_user_document_isolation():
     assert mock_vs.search.call_count >= 1
     for call_args in mock_vs.search.call_args_list:
         assert call_args.kwargs.get("user_id") == 42
+
+
+# ==============================================================================
+# Phase 2E.1: RecallEvaluator & Benchmark Unit and Integration Tests
+# ==============================================================================
+
+
+from backend.evaluation.recall_evaluator import (
+    RecallEvaluator,
+    BenchmarkQuery,
+    QueryRecallResult,
+    AggregateRecallMetrics,
+    HYPERTENSION_LIFESTYLE_BENCHMARK,
+    compute_concept_recall_at_k,
+    compute_chunk_recall_at_k,
+    verify_concept_in_text,
+)
+
+
+# ==============================================================================
+# Phase 2E.1 - 1. Concept Verification & Text Matching Tests
+# ==============================================================================
+
+def test_verify_concept_in_text_exact_and_phrasal():
+    """Verifies that clinical concept phrases match correctly in medical text."""
+    sample_text = (
+        "General approaches that may support healthy blood pressure include "
+        "regular physical activity, maintaining a healthy weight when appropriate, "
+        "choosing a balanced diet rich in vegetables, fruits, whole grains, "
+        "moderating sodium intake, avoiding tobacco, limiting alcohol, and getting adequate sleep."
+    )
+
+    assert verify_concept_in_text("regular physical activity", sample_text) is True
+    assert verify_concept_in_text("healthy weight", sample_text) is True
+    assert verify_concept_in_text("balanced diet", sample_text) is True
+    assert verify_concept_in_text("sodium", sample_text) is True
+    assert verify_concept_in_text("tobacco", sample_text) is True
+    assert verify_concept_in_text("alcohol", sample_text) is True
+    assert verify_concept_in_text("sleep", sample_text) is True
+
+    # Concept not present
+    assert verify_concept_in_text("chemotherapy", sample_text) is False
+    assert verify_concept_in_text("beta-blockers", sample_text) is False
+    assert verify_concept_in_text("", sample_text) is False
+    assert verify_concept_in_text("sodium", "") is False
+
+
+def test_verify_concept_does_not_false_positive_on_generic_words():
+    """Verifies that mentioning 'hypertension' does not trigger concepts like 'diet' or 'exercise'."""
+    text_without_lifestyle = (
+        "1. What Is Hypertension? Hypertension, commonly called high blood pressure, "
+        "is a condition in which the force of blood against artery walls is persistently elevated."
+    )
+    assert verify_concept_in_text("regular physical activity", text_without_lifestyle) is False
+    assert verify_concept_in_text("balanced diet", text_without_lifestyle) is False
+    assert verify_concept_in_text("tobacco", text_without_lifestyle) is False
+
+
+# ==============================================================================
+# 2. Recall@K Calculation Tests
+# ==============================================================================
+
+def test_compute_concept_recall_exact_calculation():
+    """Verifies exact recall calculation across different K values."""
+    chunks = [
+        {"chunk_id": "c1", "text": "Patient advised on regular physical activity and healthy weight."},
+        {"chunk_id": "c2", "text": "Diet recommendations: balanced diet and moderate sodium."},
+        {"chunk_id": "c3", "text": "Advised stopping tobacco and limiting alcohol with adequate sleep."},
+    ]
+    concepts = [
+        "regular physical activity",
+        "healthy weight",
+        "balanced diet",
+        "sodium",
+        "tobacco",
+        "alcohol",
+        "sleep"
+    ]
+
+    # At K=1: c1 has 2/7 concepts
+    r1 = compute_concept_recall_at_k(chunks, concepts, k=1)
+    assert pytest.approx(r1, rel=1e-3) == 2.0 / 7.0
+
+    # At K=2: c1 + c2 have 4/7 concepts
+    r2 = compute_concept_recall_at_k(chunks, concepts, k=2)
+    assert pytest.approx(r2, rel=1e-3) == 4.0 / 7.0
+
+    # At K=3: c1 + c2 + c3 have 7/7 concepts
+    r3 = compute_concept_recall_at_k(chunks, concepts, k=3)
+    assert pytest.approx(r3, rel=1e-3) == 1.0
+
+
+def test_compute_concept_recall_invalid_k_values():
+    """Verifies that invalid, zero, or negative K values return 0.0 safely."""
+    chunks = [{"chunk_id": "c1", "text": "regular physical activity and sleep"}]
+    concepts = ["regular physical activity", "sleep"]
+
+    assert compute_concept_recall_at_k(chunks, concepts, k=0) == 0.0
+    assert compute_concept_recall_at_k(chunks, concepts, k=-1) == 0.0
+    assert compute_concept_recall_at_k(chunks, concepts, k=-100) == 0.0
+    assert compute_concept_recall_at_k(chunks, [], k=5) == 0.0
+
+
+def test_compute_concept_recall_empty_retrieval_results():
+    """Verifies that an empty chunk list returns 0.0 recall."""
+    concepts = ["regular physical activity", "healthy weight"]
+    assert compute_concept_recall_at_k([], concepts, k=1) == 0.0
+    assert compute_concept_recall_at_k([], concepts, k=5) == 0.0
+    assert compute_concept_recall_at_k([], concepts, k=10) == 0.0
+
+
+def test_compute_concept_recall_duplicate_chunks():
+    """Verifies that duplicate chunks do not artificially inflate or corrupt recall calculation."""
+    dup_chunk = {"chunk_id": "c1", "text": "regular physical activity and healthy weight"}
+    chunks_with_duplicates = [dup_chunk, dup_chunk, dup_chunk]
+    concepts = ["regular physical activity", "healthy weight", "balanced diet"]
+
+    # 2 out of 3 concepts found despite 3 duplicate chunks
+    r1 = compute_concept_recall_at_k(chunks_with_duplicates, concepts, k=1)
+    r3 = compute_concept_recall_at_k(chunks_with_duplicates, concepts, k=3)
+    assert pytest.approx(r1, rel=1e-3) == 2.0 / 3.0
+    assert pytest.approx(r3, rel=1e-3) == 2.0 / 3.0
+
+
+def test_compute_concept_recall_missing_expected_concepts():
+    """Verifies partial recall and missing concepts reporting."""
+    chunks = [{"chunk_id": "c1", "text": "Sodium and tobacco were discussed."}]
+    concepts = ["regular physical activity", "healthy weight", "sodium", "tobacco"]
+
+    r = compute_concept_recall_at_k(chunks, concepts, k=1)
+    assert pytest.approx(r, rel=1e-3) == 2.0 / 4.0  # 0.5
+
+
+def test_compute_chunk_recall_at_k():
+    """Verifies standard chunk-id based recall."""
+    retrieved = ["c1", "c2", "c3", "c4"]
+    expected = ["c1", "c5"]
+
+    assert compute_chunk_recall_at_k(retrieved, expected, k=1) == 0.5  # c1 in top 1 of 2
+    assert compute_chunk_recall_at_k(retrieved, expected, k=3) == 0.5  # c1 in top 3 of 2
+    assert compute_chunk_recall_at_k([], expected, k=5) == 0.0
+    assert compute_chunk_recall_at_k(retrieved, [], k=5) == 0.0
+    assert compute_chunk_recall_at_k(retrieved, expected, k=0) == 0.0
+
+
+# ==============================================================================
+# 3. RecallEvaluator Unit Tests (Offline / Mocked RAG)
+# ==============================================================================
+
+class MockRAGService:
+    """Mock RAGService for isolated offline tests."""
+    def __init__(self, canned_responses: Dict[str, Dict[str, Any]]):
+        self.canned = canned_responses
+
+    def query(self, question: str, top_k: int = 5, **kwargs) -> Dict[str, Any]:
+        return self.canned.get(question, {
+            "question": question,
+            "retrieved_chunks": [],
+            "retrieval_status": "no_relevant_context"
+        })
+
+
+def test_evaluator_successful_retrieval():
+    """Verifies RecallEvaluator correctly processes successful queries."""
+    canned = {
+        "What lifestyle changes help hypertension?": {
+            "question": "What lifestyle changes help hypertension?",
+            "retrieved_chunks": [
+                {
+                    "chunk_id": "chunk_0",
+                    "text": (
+                        "General approaches include regular physical activity, maintaining a healthy weight, "
+                        "choosing a balanced diet, moderating sodium, avoiding tobacco, limiting alcohol, "
+                        "and getting adequate sleep."
+                    ),
+                    "similarity_score": 0.6903,
+                    "metadata": {"filename": "synthetic_hypertension_test.pdf"}
+                }
+            ],
+            "retrieval_status": "success"
+        }
+    }
+    mock_rag = MockRAGService(canned)
+    evaluator = RecallEvaluator(rag_service=mock_rag, k_values=[1, 3, 5, 10])
+
+    res = evaluator.evaluate_query(
+        query="What lifestyle changes help hypertension?",
+        expected_concepts=[
+            "regular physical activity",
+            "healthy weight",
+            "balanced diet",
+            "sodium",
+            "tobacco",
+            "alcohol",
+            "sleep"
+        ]
+    )
+
+    assert res.retrieval_status == "success"
+    assert res.recall_at_k[1] == 1.0
+    assert res.recall_at_k[3] == 1.0
+    assert res.recall_at_k[5] == 1.0
+    assert res.recall_at_k[10] == 1.0
+    assert len(res.matched_concepts) == 7
+    assert len(res.missing_concepts) == 0
+    assert res.concept_coverage == 1.0
+
+
+def test_evaluator_failed_retrieval():
+    """Verifies RecallEvaluator correctly handles queries that yield no chunks."""
+    mock_rag = MockRAGService({})
+    evaluator = RecallEvaluator(rag_service=mock_rag, k_values=[1, 3, 5, 10])
+
+    res = evaluator.evaluate_query(
+        query="What non-medication measures help manage hypertension?",
+        expected_concepts=["regular physical activity", "healthy weight"]
+    )
+
+    assert res.retrieval_status == "no_relevant_context"
+    assert res.recall_at_k[1] == 0.0
+    assert res.recall_at_k[3] == 0.0
+    assert res.recall_at_k[5] == 0.0
+    assert res.recall_at_k[10] == 0.0
+    assert len(res.matched_concepts) == 0
+    assert len(res.missing_concepts) == 2
+    assert res.concept_coverage == 0.0
+
+
+def test_evaluator_deterministic_evaluation():
+    """Verifies that running evaluation repeatedly produces identical deterministic metrics."""
+    canned = {
+        "test query": {
+            "question": "test query",
+            "retrieved_chunks": [
+                {
+                    "chunk_id": "chunk_0",
+                    "text": "balanced diet and sodium moderation.",
+                    "similarity_score": 0.55
+                }
+            ],
+            "retrieval_status": "success"
+        }
+    }
+    mock_rag = MockRAGService(canned)
+    evaluator = RecallEvaluator(rag_service=mock_rag, k_values=[1, 3, 5])
+    concepts = ["balanced diet", "sodium", "sleep"]
+
+    res1 = evaluator.evaluate_query("test query", expected_concepts=concepts)
+    res2 = evaluator.evaluate_query("test query", expected_concepts=concepts)
+
+    assert res1.recall_at_k == res2.recall_at_k
+    assert res1.matched_concepts == res2.matched_concepts
+    assert res1.missing_concepts == res2.missing_concepts
+    assert res1.concept_coverage == res2.concept_coverage
+
+
+def test_evaluator_report_formatting():
+    """Verifies that query and benchmark reports match the required format."""
+    mock_rag = MockRAGService({
+        "Q1": {
+            "question": "Q1",
+            "retrieved_chunks": [
+                {"chunk_id": "chunk_0", "text": "regular physical activity", "similarity_score": 0.65}
+            ],
+            "retrieval_status": "success"
+        }
+    })
+    evaluator = RecallEvaluator(rag_service=mock_rag, k_values=[1, 3, 5, 10])
+    metrics = evaluator.evaluate_benchmark(
+        benchmark=[{"query": "Q1", "expected_concepts": ["regular physical activity", "sleep"]}]
+    )
+
+    report = evaluator.format_benchmark_report(metrics)
+    assert "Retrieval Recall Evaluation" in report
+    assert "Recall@1" in report
+    assert "Recall@3" in report
+    assert "Recall@5" in report
+    assert "Recall@10" in report
+    assert "✓ regular physical activity" in report
+    assert "✗ sleep" in report
+    assert "Aggregate Recall Baseline Summary" in report
+    assert "Mean Recall@1" in report
+
+
+# ==============================================================================
+# 4. Live Benchmark Baseline Integration Test
+# ==============================================================================
+
+def test_live_hypertension_lifestyle_benchmark_baseline():
+    """
+    Executes the canonical Phase 2E.1 retrieval benchmark against the live FAISS index.
+
+    Validates:
+    - 4 queries evaluated.
+    - Queries 1, 2, and 3 retrieve chunk_0 with 100% recall (7/7 concepts).
+    - Query 4 ('What non-medication measures help manage hypertension?') fails retrieval
+      due to pre-LLM sufficiency gate ('missing_medication_recommendations_in_context').
+    - Establishes the ground-truth baseline Mean Recall@K = 0.75 (75.0%).
+    """
+    from backend.services.vector_store_service import get_vector_store_service
+    from backend.rag.rag_service import RAGService
+
+    vs = get_vector_store_service()
+    assert vs.count() > 0, "FAISS vector store must be loaded"
+
+    rag = RAGService(vector_store=vs)
+    evaluator = RecallEvaluator(rag_service=rag, k_values=[1, 3, 5, 10], default_user_id=2)
+
+    metrics = evaluator.evaluate_benchmark(HYPERTENSION_LIFESTYLE_BENCHMARK)
+
+    assert metrics.total_queries == 4
+    assert metrics.successful_queries == 4
+    assert metrics.failed_queries == 0
+
+    # Verify individual queries
+    q1_res = metrics.query_results[0]
+    assert q1_res.retrieval_status == "success"
+    assert q1_res.recall_at_k[1] == 1.0
+    assert q1_res.recall_at_k[5] == 1.0
+    assert "synthetic_hypertension_test.pdf" in q1_res.retrieved_documents[0]
+
+    q2_res = metrics.query_results[1]
+    assert q2_res.retrieval_status == "success"
+    assert q2_res.recall_at_k[1] == 1.0
+    assert q2_res.recall_at_k[5] == 1.0
+
+    q3_res = metrics.query_results[2]
+    assert q3_res.retrieval_status == "success"
+    assert q3_res.recall_at_k[1] == 1.0
+    assert q3_res.recall_at_k[5] == 1.0
+
+    q4_res = metrics.query_results[3]
+    # Query 4 ('What non-medication measures help manage hypertension?') succeeds after Phase 2E.2 query expansion
+    assert q4_res.retrieval_status == "success"
+    assert q4_res.recall_at_k[1] == 1.0
+    assert q4_res.recall_at_k[5] == 1.0
+    assert len(q4_res.matched_concepts) == 7
+
+    # Aggregate: all 4 queries achieve 1.0 => 1.0
+    assert pytest.approx(metrics.mean_recall_at_k[1], rel=1e-3) == 1.0
+    assert pytest.approx(metrics.mean_recall_at_k[3], rel=1e-3) == 1.0
+    assert pytest.approx(metrics.mean_recall_at_k[5], rel=1e-3) == 1.0
+    assert pytest.approx(metrics.mean_recall_at_k[10], rel=1e-3) == 1.0

@@ -473,6 +473,34 @@ class APIClient:
         except Exception:
             return None
 
+    def delete_document(self, document_id: int) -> Dict[str, Any]:
+        """
+        Deletes a document via DELETE /documents/{document_id}.
+        Strictly isolated to the authenticated user.
+        """
+        url = f"{self.base_url}/documents/{document_id}"
+        try:
+            response = requests.delete(
+                url,
+                headers=self.get_headers(),
+                timeout=self.DEFAULT_TIMEOUT_FAST,
+            )
+            if response.status_code in (200, 204):
+                return {"success": True, "error": None}
+            if response.status_code == 401:
+                return {"success": False, "error": "Session expired or unauthenticated."}
+            if response.status_code == 403:
+                return {"success": False, "error": "Access denied: Cannot delete another user's document."}
+            if response.status_code == 404:
+                return {"success": False, "error": "Document not found."}
+            try:
+                err_msg = response.json().get("detail", response.text)
+            except Exception:
+                err_msg = response.text
+            return {"success": False, "error": err_msg}
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
     def send_agent_query(
         self,
         question: str,
@@ -699,6 +727,37 @@ class APIClient:
         except Exception as e:
             return {"success": False, "error": str(e)}
 
+    def rename_conversation(self, conversation_id: int, new_title: str) -> Dict[str, Any]:
+        """
+        Renames a conversation session via PATCH /conversations/{conversation_id}.
+        Strictly isolated to the authenticated user.
+        """
+        url = f"{self.base_url}/conversations/{conversation_id}"
+        payload = {"title": new_title}
+        try:
+            response = requests.patch(
+                url,
+                json=payload,
+                headers=self.get_headers(),
+                timeout=self.DEFAULT_TIMEOUT_FAST,
+            )
+            if response.status_code == 200:
+                return {"success": True, "data": response.json(), "error": None}
+            if response.status_code == 401:
+                return {"success": False, "error": "Session expired or unauthenticated."}
+            if response.status_code == 403:
+                return {"success": False, "error": "Access denied: Cannot modify another user's conversation."}
+            if response.status_code == 404:
+                return {"success": False, "error": "Conversation not found."}
+            try:
+                err_msg = response.json().get("detail", response.text)
+            except Exception:
+                err_msg = response.text
+            return {"success": False, "error": err_msg}
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
+
 
     def query_rag(
         self,
@@ -801,6 +860,74 @@ class APIClient:
                 "error": "Unable to generate a response right now. Please try again.",
                 "status_code": None,
             }
+
+    def stream_rag_query(
+        self,
+        question: str,
+        top_k: int = 5,
+        similarity_threshold: float = 0.25,
+        conversation_history: Optional[List[Dict[str, str]]] = None,
+        timeout: float = 60.0,
+    ):
+        """
+        Connects to POST /rag/stream using Server-Sent Events (SSE).
+        Emits parsed event tuples: (event_type: str, data: Dict[str, Any]).
+        Handles start, status, token, complete, and error events gracefully.
+        """
+        import json
+        url = f"{self.base_url}/rag/stream"
+        payload = {
+            "question": question,
+            "top_k": top_k,
+            "similarity_threshold": similarity_threshold,
+            "conversation_history": conversation_history,
+        }
+        headers = self.get_headers({"Accept": "text/event-stream"})
+        try:
+            with requests.post(url, json=payload, headers=headers, stream=True, timeout=timeout) as response:
+                if response.status_code == 401:
+                    self.set_token(None)
+                    yield ("error", {"error": "Your session has expired. Please sign in again.", "status_code": 401})
+                    return
+                elif response.status_code == 403:
+                    yield ("error", {"error": "Access denied.", "status_code": 403})
+                    return
+                elif response.status_code == 429:
+                    yield ("error", {"error": "Rate limit exceeded. Please wait a moment before sending another query.", "status_code": 429})
+                    return
+                elif response.status_code >= 400:
+                    err_msg = f"Server returned error {response.status_code}."
+                    try:
+                        err_json = response.json()
+                        err_msg = err_json.get("detail", err_msg)
+                    except Exception:
+                        if response.text:
+                            err_msg = response.text
+                    yield ("error", {"error": err_msg, "status_code": response.status_code})
+                    return
+
+                current_event = "message"
+                for line in response.iter_lines(decode_unicode=True):
+                    if line is None:
+                        continue
+                    line = line.strip()
+                    if not line:
+                        continue
+                    if line.startswith("event:"):
+                        current_event = line[len("event:"):].strip()
+                    elif line.startswith("data:"):
+                        data_str = line[len("data:"):].strip()
+                        try:
+                            payload_data = json.loads(data_str)
+                        except json.JSONDecodeError:
+                            payload_data = {"raw": data_str}
+                        yield (current_event, payload_data)
+        except requests.exceptions.ConnectionError:
+            yield ("error", {"error": "Backend server is unavailable. Verify FastAPI is running.", "status_code": None})
+        except requests.exceptions.Timeout:
+            yield ("error", {"error": "Streaming request timed out.", "status_code": None})
+        except Exception as e:
+            yield ("error", {"error": f"Streaming failure: {str(e)}", "status_code": None})
 
     def send_medical_chat(
         self,
@@ -962,7 +1089,79 @@ class APIClient:
                 "status_code": None
             }
 
+    def get_observability_metrics(self) -> Dict[str, Any]:
+        """
+        Retrieves system observability telemetry and performance metrics from GET /metrics.
+        Extracts non-sensitive metrics for dashboards and settings:
+        - request counts (total, successful, failed, blocked)
+        - cache hit rate
+        - safety interceptions
+        - LLM calls and failure rates
+        - latency percentiles (p50, p95, p99)
+        - circuit breaker and system health
+        Strictly prevents leakage of API keys, bearer tokens, PHI, or user queries.
+        """
+        metrics_url = f"{self.base_url}/metrics"
+        health_url = f"{self.base_url}/health"
+        result: Dict[str, Any] = {
+            "backend_status": "offline",
+            "request_count": 0,
+            "success_count": 0,
+            "error_count": 0,
+            "blocked_count": 0,
+            "cache_hits": 0,
+            "cache_misses": 0,
+            "cache_hit_rate": 0.0,
+            "safety_interceptions": 0,
+            "llm_calls": 0,
+            "llm_failures": 0,
+            "p50_latency_ms": 0.0,
+            "p95_latency_ms": 0.0,
+            "p99_latency_ms": 0.0,
+            "circuit_breaker_state": "closed",
+        }
+        try:
+            h_res = requests.get(health_url, timeout=3.0)
+            if h_res.status_code == 200:
+                h_data = h_res.json()
+                result["backend_status"] = h_data.get("status", "healthy")
+                cb = h_data.get("circuit_breaker")
+                if isinstance(cb, dict):
+                    result["circuit_breaker_state"] = cb.get("state", "closed")
+        except Exception:
+            pass
+
+        try:
+            m_res = requests.get(metrics_url, timeout=3.0)
+            if m_res.status_code == 200:
+                m_data = m_res.json()
+                reqs = m_data.get("requests", {})
+                result["request_count"] = reqs.get("total", 0)
+                result["success_count"] = reqs.get("successful", 0)
+                result["error_count"] = reqs.get("failed", 0)
+                result["blocked_count"] = reqs.get("blocked", 0)
+
+                cache = m_data.get("cache", {})
+                result["cache_hits"] = cache.get("hits", 0)
+                result["cache_misses"] = cache.get("misses", 0)
+                result["cache_hit_rate"] = round(float(cache.get("hit_ratio", 0.0)) * 100.0, 1)
+
+                safety = m_data.get("safety", {})
+                result["safety_interceptions"] = safety.get("blocked", 0)
+
+                llm = m_data.get("llm", {})
+                result["llm_calls"] = llm.get("calls", 0)
+                result["llm_failures"] = llm.get("failures", 0)
+
+                latency = m_data.get("latency", {}).get("total", {})
+                result["p50_latency_ms"] = round(float(latency.get("p50", 0.0)) * 1000.0, 1)
+                result["p95_latency_ms"] = round(float(latency.get("p95", 0.0)) * 1000.0, 1)
+                result["p99_latency_ms"] = round(float(latency.get("p99", 0.0)) * 1000.0, 1)
+        except Exception:
+            pass
+
+        return result
+
 
 # Singleton client instance
 api_client = APIClient()
-

@@ -314,6 +314,12 @@ class HallucinationGuard:
         ]
         candidates.extend(segments)
 
+        # Include compound sub-clauses for complex multi-recommendation sentences
+        for seg in segments:
+            if len(seg) > 60 and (',' in seg or ';' in seg):
+                sub_parts = [p.strip() for p in re.split(r'[,;]', seg) if len(p.strip()) > 12]
+                candidates.extend(sub_parts)
+
         best_score = -1.0
         best_segment = candidates[0]
 
@@ -346,14 +352,32 @@ class HallucinationGuard:
         # Polarity mismatch detection
         # Case A: Source explicitly negates/contraindicates, but claim asserts affirmatively
         if source_entities.has_negation and not claim_entities.has_negation:
-            # Verify clinical entity overlap between claim and source segment
-            shared_words = set(re.findall(r'\b[a-z]{4,}\b', claim_text.lower())) & \
-                           set(re.findall(r'\b[a-z]{4,}\b', best_source_segment.lower()))
-            if len(shared_words) >= 2:
+            src_lower = best_source_segment.lower()
+            claim_words = set(re.findall(r'\b[a-z]{4,}\b', claim_text.lower()))
+
+            # Extract negated concepts in source within the local clause or window around negation terms
+            negated_source_words = set()
+            clauses = re.split(r'[,;]|\b(?:and|or|but|while)\b', src_lower)
+            for neg_term in source_entities.negation_terms:
+                t_lower = neg_term.lower()
+                for clause in clauses:
+                    if t_lower in clause:
+                        negated_source_words.update(re.findall(r'\b[a-z]{4,}\b', clause))
+                pattern = rf'(?:\b\w+\b\s+){{0,4}}\b{re.escape(t_lower)}\b(?:\s+\b\w+\b){{0,5}}'
+                for m in re.finditer(pattern, src_lower):
+                    negated_source_words.update(re.findall(r'\b[a-z]{4,}\b', m.group(0)))
+
+            negated_source_words.difference_update({
+                "patient", "patients", "treatment", "therapy", "management", "clinical",
+                "recommended", "indicated", "advised", "first", "line", "daily", "general", "measure", "measures"
+            })
+
+            negated_overlap = claim_words & negated_source_words
+            if len(negated_overlap) >= 1:
                 neg_reasons = ", ".join(f"'{p}'" for p in source_entities.negation_terms)
                 return True, (
-                    f"Negation contradiction: Source negates assertion ({neg_reasons}), "
-                    f"but claim asserts it affirmatively."
+                    f"Negation contradiction: Source negates assertion ({neg_reasons}) regarding "
+                    f"'{', '.join(sorted(negated_overlap))}', but claim asserts it affirmatively."
                 )
 
         # Case B: Source asserts affirmatively, but claim asserts negatively when source does not support negation

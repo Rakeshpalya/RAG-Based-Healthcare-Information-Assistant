@@ -1,6 +1,8 @@
+import json
 import logging
 from typing import List, Dict, Any, Optional
 from fastapi import APIRouter, HTTPException, status, Depends, Request
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field, ConfigDict
 
 from backend.rag.rag_service import RAGService
@@ -99,9 +101,9 @@ async def retrieve_rag_context(
     4. Filters results by similarity threshold.
     5. Assembles context string with [SOURCE N] headers and preserves source citations.
     """
-    if raw_request is not None:
-        rate_limiter.check_rate_limit(raw_request, endpoint_type="rag_retrieve")
     user_id = current_user.id if isinstance(current_user, User) else None
+    if raw_request is not None:
+        rate_limiter.check_rate_limit(raw_request, endpoint_type="rag_retrieve", user_id=user_id)
     active_service = _resolve_active_rag_service(user_id)
     result = active_service.query(
         question=request.question,
@@ -157,6 +159,9 @@ class RAGQueryResponse(BaseModel):
     disclaimer: str
     timings: Optional[Dict[str, Any]] = None
     request_id: Optional[str] = None
+    intent: Optional[Dict[str, Any]] = None
+    orchestration: Optional[Dict[str, Any]] = None
+    clinical_intelligence_orchestration: Optional[Dict[str, Any]] = None
 
 
 @router.post(
@@ -182,10 +187,16 @@ async def query_rag(
     from backend.services.gemini_service import GeminiServiceError
     from backend.evaluation.observability import generate_request_id
 
-    if raw_request is not None:
-        rate_limiter.check_rate_limit(raw_request, endpoint_type="rag_query")
     user_id = current_user.id if isinstance(current_user, User) else None
+    if raw_request is not None:
+        rate_limiter.check_rate_limit(raw_request, endpoint_type="rag_query", user_id=user_id)
     active_service = _resolve_active_rag_service(user_id)
+
+    req_id = (
+        (getattr(raw_request.state, "request_id", None) if raw_request and hasattr(raw_request, "state") else None)
+        or (raw_request.headers.get("X-Request-ID") if raw_request else None)
+        or generate_request_id()
+    )
 
     try:
         result = active_service.generate_rag_answer(
@@ -193,11 +204,10 @@ async def query_rag(
             top_k=request.top_k,
             similarity_threshold=request.similarity_threshold,
             user_id=user_id,
-            conversation_history=request.conversation_history
+            conversation_history=request.conversation_history,
+            request_id=req_id
         )
-        req_id = result.get("request_id") or (
-            result.get("timings", {}).get("request_id") if result.get("timings") else None
-        ) or generate_request_id()
+        req_id = result.get("request_id") or req_id
 
         logger.info(
             "RAG query completed for user_id=%s [req_id=%s]: status=%s, sources=%d",
@@ -214,7 +224,8 @@ async def query_rag(
             context=result.get("context"),
             disclaimer=result.get("disclaimer", ""),
             timings=result.get("timings"),
-            request_id=req_id
+            request_id=req_id,
+            intent=result.get("intent")
         )
     except GeminiServiceError as gse:
         logger.warning("GeminiServiceError handled cleanly in rag_router: %s", str(gse))
@@ -240,3 +251,69 @@ async def query_rag(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="An unexpected error occurred during RAG query processing."
         )
+
+
+@router.post(
+    "/stream",
+    summary="Execute Streaming RAG Query (Server-Sent Events)",
+    description=(
+        "Executes RAG with real-time Server-Sent Events (SSE) streaming. "
+        "Strict clinical safety: tokens are buffered and validated before streaming to user."
+    ),
+    response_class=StreamingResponse
+)
+async def stream_rag_query(
+    request: RAGQueryRequest,
+    raw_request: Request = None,
+    current_user: Optional[User] = Depends(get_optional_current_db_user)
+):
+    """
+    Server-Sent Events (SSE) Streaming RAG Endpoint:
+    Content-Type: text/event-stream
+    Events emitted:
+    - event: start (trace_id, question, timestamp)
+    - event: status (pipeline step updates: retrieval, sufficiency_gate, generation, validation)
+    - event: token (streamed text tokens after safety validation)
+    - event: complete (final structured response with citations, sources, timings)
+    - event: error (safe redacted failure notification if any step fails)
+    """
+    user_id = current_user.id if isinstance(current_user, User) else None
+    if raw_request is not None:
+        rate_limiter.check_rate_limit(raw_request, endpoint_type="rag_stream", user_id=user_id)
+    active_service = _resolve_active_rag_service(user_id)
+
+    req_id = (
+        (getattr(raw_request.state, "request_id", None) if raw_request and hasattr(raw_request, "state") else None)
+        or (raw_request.headers.get("X-Request-ID") if raw_request else None)
+        or generate_request_id()
+    )
+
+    async def event_generator():
+        try:
+            for event_type, event_payload in active_service.generate_rag_stream(
+                question=request.question,
+                top_k=request.top_k,
+                similarity_threshold=request.similarity_threshold,
+                user_id=user_id,
+                conversation_history=request.conversation_history,
+                request_id=req_id
+            ):
+                payload_json = json.dumps(event_payload, ensure_ascii=False)
+                yield f"event: {event_type}\ndata: {payload_json}\n\n"
+        except Exception as exc:
+            logger.error("Unhandled exception during SSE streaming: %s", str(exc))
+            err_data = json.dumps({
+                "error": "An unexpected error occurred during streaming.",
+                "status": "error"
+            })
+            yield f"event: error\ndata: {err_data}\n\n"
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no"
+        }
+    )

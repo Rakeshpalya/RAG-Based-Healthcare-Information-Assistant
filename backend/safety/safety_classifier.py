@@ -13,8 +13,8 @@ class SafetyClassifier:
 
     # 1. Critical Emergency Patterns
     EMERGENCY_PATTERNS = [
-        (r"\b(?:severe|crushing|sharp|radiating|intense|acute)\s+chest\s+pain\b", "EMERGENCY_CHEST_PAIN"),
-        (r"\bchest\s+pain\s+(?:with|and)\s+(?:sweating|nausea|shortness\s+of\s+breath|difficulty\s+breathing|jaw\s+pain|left\s+arm\s+pain)\b", "EMERGENCY_CARDIAC_SYMPTOMS"),
+        (r"\b(?:severe|crushing|sharp|radiating|intense|acute)\s+(?:\w+\s+)?chest\s+pain\b", "EMERGENCY_CHEST_PAIN"),
+        (r"\bchest\s+pain\s+(?:radiating\s+[\w\s]{0,25}|with|and)\s+(?:sweating|nausea|shortness\s+of\s+breath|difficulty\s+breathing|jaw|left\s+arm)\b", "EMERGENCY_CARDIAC_SYMPTOMS"),
         (r"\b(?:difficulty|trouble|can't|cannot|unable\s+to|struggling\s+to)\s+breath(?:e|ing)?\b", "EMERGENCY_DYSPNEA"),
         (r"\b(?:shortness\s+of\s+breath|severe\s+dyspnea|gasping\s+for\s+air|suffocating)\b", "EMERGENCY_RESPIRATORY"),
         (r"\b(?:unconscious|unresponsive|passed\s+out|fainted|loss\s+of\s+consciousness|collapsed\s+and\s+unresponsive)\b", "EMERGENCY_UNCONSCIOUS"),
@@ -45,12 +45,13 @@ class SafetyClassifier:
     # 2. Self-Harm & Suicide Patterns
     SELF_HARM_PATTERNS = [
         (r"\b(?:suicid\w*|kill\s+myself|end\s+my\s+life|want\s+to\s+die|hang\s+myself|cut\s+my\s+wrists?|self-harm|take\s+my\s+own\s+life)\b", "SELF_HARM_DIRECT"),
-        (r"\bhow\s+to\s+(?:commit\s+suicide|kill\s+oneself|die\s+painlessly)\b", "SELF_HARM_METHODS")
+        (r"\bhow\s+to\s+(?:commit\s+suicide|kill\s+oneself|die\s+painlessly)\b", "SELF_HARM_METHODS"),
+        (r"\b(?:never\s+wake\s+up|sleep\s+forever|to\s+never\s+wake\s+up)\b", "SELF_HARM_SLEEP")
     ]
 
     # 3. Poisoning & Overdose Patterns
     POISONING_OVERDOSE_PATTERNS = [
-        (r"\b(?:overdos\w*|took\s+(?:an?\s+)?(?:entire|whole)?\s*bottle\s+of\b|took\s+(?:an?\s+)?(?:entire\s+)?bottle\s+of\s+[\w\s]{0,25}pills|took\s+too\s+many\s+pills|swallowed\s+(?:an?\s+)?bottle)\b", "OVERDOSE_MEDICATION"),
+        (r"\b(?:overdos\w*|took\s+(?:an?\s+)?(?:entire|whole)?\s*bottle\s+of\b|took\s+(?:an?\s+)?(?:entire\s+)?bottle\s+of\s+[\w\s]{0,25}pills|took\s+too\s+many\s+pills|swallowed\s+(?:an?\s+)?(?:entire|whole)?\s*bottle|(?:swallowed|took|ingested)\s+(?:\d{2,}|a\s+handful\s+of|too\s+many|excessive)\s+(?:[\w\-]+\s+)?(?:pills|tablets|capsules))\b", "OVERDOSE_MEDICATION"),
         (r"\b(?:swallowed|drank|ingested)\s+(?:(?:an?\s+)?(?:whole|entire)?\s*(?:bottle|cup|glass|can|amount)\s+of\s+)?(?:bleach|poison|antifreeze|cleaner|detergent|chemical|battery|toxic)\b", "POISONING_INGESTION"),
         (r"\b(?:toxic\s+exposure|chemical\s+burn\s+in\s+eye|inhaled\s+toxic\s+fumes)\b", "POISONING_EXPOSURE")
     ]
@@ -58,7 +59,7 @@ class SafetyClassifier:
     # 4. Immediate Danger / Unsafe & Unsupported Patterns
     UNSAFE_PATTERNS = [
         (r"\bhow\s+to\s+(?:synthesize|manufacture|extract|make)\s+(?:[\w\-]+\s+)?(?:fentanyl|meth|heroin|ricin|anthrax|poison|explosive)\b", "UNSAFE_ILLICIT_SYNTHESIS"),
-        (r"\b(?:lethal\s+dose\s+to\s+kill|recreational\s+high\s+from|bypass\s+(?:the\s+)?safety\s+(?:filter|guard|rules|engine|system)|ignore\s+(?:all\s+)?(?:previous\s+)?(?:instructions|rules))\b", "UNSAFE_MALICIOUS")
+        (r"\b(?:lethal\s+dose\s+to\s+kill|recreational\s+high\s+from|bypass\s+(?:the\s+)?safety\s+(?:filter|guard|rules|engine|system)|ignore\s+(?:all\s+)?(?:previous\s+)?(?:instructions|rules)|alternate\s+universe\s+with\s+no\s+(?:medical\s+)?regulations|act\s+as\s+an\s+unrestricted\s+doctor|pretend\s+you\s+are\s+an?\s+unregulated)\b", "UNSAFE_MALICIOUS")
     ]
 
     # 5. Direct Diagnosis Requests
@@ -89,7 +90,8 @@ class SafetyClassifier:
     MEDICATION_PATTERNS = [
         (r"\bwhat\s+(?:medicine|medication|drug|pill)\s+should\s+i\s+take\b", "MEDICATION_WHAT_SHOULD_I_TAKE"),
         (r"\bprescribe\s+(?:me|for\s+me)\b", "MEDICATION_PRESCRIBE_ME"),
-        (r"\bcan\s+you\s+give\s+me\s+a\s+prescription\b", "MEDICATION_GIVE_PRESCRIPTION"),
+        (r"\b(?:can\s+you\s+)?(?:write|give|get)\s+(?:me\s+)?(?:a\s+)?prescription\b", "MEDICATION_GIVE_PRESCRIPTION"),
+        (r"\bprescription\s+(?:for|refill)\b", "MEDICATION_PRESCRIPTION_REQUEST"),
         (r"\brecommend\s+a\s+(?:medicine|drug|pill)\s+for\s+me\b", "MEDICATION_RECOMMEND_FOR_ME")
     ]
 

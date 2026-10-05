@@ -34,8 +34,9 @@ NAV_DASHBOARD = "Dashboard"
 NAV_DOCUMENTS = "Documents"
 NAV_CHAT = "Research Chat"
 NAV_HISTORY = "History"
+NAV_SETTINGS = "Settings"
 
-NAV_ITEMS = [NAV_DASHBOARD, NAV_DOCUMENTS, NAV_CHAT, NAV_HISTORY]
+NAV_ITEMS = [NAV_DASHBOARD, NAV_DOCUMENTS, NAV_CHAT, NAV_HISTORY, NAV_SETTINGS]
 
 
 def normalize_page_name(page_name: Optional[str]) -> str:
@@ -48,6 +49,7 @@ def normalize_page_name(page_name: Optional[str]) -> str:
         .replace("💬", "")
         .replace("🕘", "")
         .replace("🏠", "")
+        .replace("⚙️", "")
         .strip()
     )
     if "Chat" in clean:
@@ -56,6 +58,8 @@ def normalize_page_name(page_name: Optional[str]) -> str:
         return NAV_DOCUMENTS
     if "Hist" in clean:
         return NAV_HISTORY
+    if "Setting" in clean or "Config" in clean:
+        return NAV_SETTINGS
     return NAV_DASHBOARD
 
 
@@ -99,7 +103,7 @@ def render_navbar(set_page_fn: Optional[Callable[[str], None]] = None) -> str:
         st.rerun()
 
     # 2. Render Single Horizontal Container with 3 flex groups
-    col_brand, col_nav, col_actions = st.columns([3.2, 5.2, 3.8])
+    col_brand, col_nav, col_actions = st.columns([2.8, 6.0, 3.4])
 
     # SECTION 1: Brand Logo, Title, Subtitle, and Divider
     with col_brand:
@@ -119,7 +123,7 @@ def render_navbar(set_page_fn: Optional[Callable[[str], None]] = None) -> str:
             unsafe_allow_html=True,
         )
 
-    # SECTION 2: Center Navigation Pills (Dashboard, Documents, Research Chat, History)
+    # SECTION 2: Center Navigation Pills (Dashboard, Documents, Research Chat, History, Settings)
     with col_nav:
         st.markdown('<div id="navbar-nav-group"></div>', unsafe_allow_html=True)
 
@@ -158,6 +162,15 @@ def render_navbar(set_page_fn: Optional[Callable[[str], None]] = None) -> str:
             help="Review previous research consultations",
         ):
             handle_navigate(NAV_HISTORY)
+
+        is_settings_active = current_page == NAV_SETTINGS
+        if st.button(
+            "⚙️ Settings",
+            key="top_nav_settings",
+            type="primary" if is_settings_active else "secondary",
+            help="Configure account, preferences, and view telemetry",
+        ):
+            handle_navigate(NAV_SETTINGS)
 
     # SECTION 3: Right Actions Group (Divider, Theme Toggle, User Profile, Sign Out)
     with col_actions:
@@ -214,6 +227,8 @@ def render_navbar(set_page_fn: Optional[Callable[[str], None]] = None) -> str:
                     handle_navigate(NAV_CHAT)
                 if st.button("🕘 History", key="m_nav_hist", use_container_width=True):
                     handle_navigate(NAV_HISTORY)
+            if st.button("⚙️ Settings", key="m_nav_settings", use_container_width=True):
+                handle_navigate(NAV_SETTINGS)
             if st.button("⇥ Sign Out", key="m_nav_logout", use_container_width=True):
                 handle_logout()
 

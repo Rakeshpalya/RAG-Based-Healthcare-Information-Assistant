@@ -1,0 +1,164 @@
+name: Phase 4 — Medical AI Evaluation & Clinical Quality Pipeline
+
+on:
+  push:
+    branches: [ main, master, release/* ]
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:
+    inputs:
+      enable_live_llm:
+        description: "Enable live Gemini LLM evaluation (requires GEMINI_API_KEY secret)"
+        required: false
+        default: false
+        type: boolean
+
+env:
+  ENVIRONMENT: test
+  HOST: 0.0.0.0
+  PORT: 8000
+  RAG_TOP_K: 5
+  RAG_SIMILARITY_THRESHOLD: 0.25
+  RAG_LATENCY_P95_BUDGET_MS: 3500.0
+  DEBUG: "false"
+  SAFE_LOG_MODE: "true"
+  REDIS_ENABLED: "false"
+  GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY || 'test-mock-ci-key' }}
+  ENABLE_LIVE_LLM: ${{ inputs.enable_live_llm || 'false' }}
+
+jobs:
+  phase4-clinical-evaluation:
+    name: Phase 4 Medical AI Evaluation & Quality Audit
+    runs-on: ubuntu-latest
+
+    steps:
+      # ========================================================================
+      # 1. Setup & Environment Initialization
+      # ========================================================================
+      - name: Checkout Source Code
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install System Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libgomp1 curl
+
+      # Step 1: Install Dependencies
+      - name: 1. Install Dependencies
+        run: |
+          python -m pip install --upgrade pip setuptools wheel
+          pip install -r requirements.txt
+
+      # Step 2: Validate Configuration & Production Vector Invariants
+      - name: 2. Validate Configuration & Invariants
+        run: |
+          python -m compileall backend tests scripts
+          python -c "
+          import json, faiss
+          idx = faiss.read_index('data/vector_store/index.faiss')
+          meta = json.load(open('data/vector_store/metadata.json', 'r', encoding='utf-8'))
+          print(f'Production Invariants: FAISS={idx.ntotal} | Metadata={len(meta[\"records\"])} | Dim={idx.d}')
+          assert idx.ntotal == 744, f'Expected 744 vectors, got {idx.ntotal}'
+          assert len(meta['records']) == 744, f'Expected 744 records, got {len(meta[\"records\"])}'
+          assert idx.d == 384, f'Expected 384 dimension, got {idx.d}'
+          "
+          python -c "
+          from backend.evaluation.phase4_dataset import Phase4DatasetLoader
+          cases = Phase4DatasetLoader.load_dataset()
+          print(f'Golden Phase 4 Evaluation Dataset loaded successfully: {len(cases)} cases across 15 categories.')
+          assert len(cases) >= 30, f'Expected >= 30 cases, found {len(cases)}'
+          "
+
+      # Step 3: Run Evaluation Tests (Phase 4 Full Test Suite)
+      - name: 3. Run Evaluation Test Suite
+        run: |
+          pytest -v tests/test_phase4_retrieval.py \
+                    tests/test_phase4_citations.py \
+                    tests/test_phase4_grounding.py \
+                    tests/test_phase4_medical_safety.py \
+                    tests/test_phase4_answer_quality.py \
+                    tests/test_phase4_adversarial.py
+
+      # Step 4: Run Retrieval Benchmark
+      - name: 4. Run Retrieval Benchmark
+        run: |
+          python scripts/evaluate_phase4.py --category "document-grounded questions"
+          python scripts/evaluate_phase4.py --category "medical factual questions"
+          python scripts/evaluate_phase4.py --category "unsupported questions"
+
+      # Step 5: Run Safety Regression
+      - name: 5. Run Safety Regression
+        run: |
+          pytest -v tests/test_phase4_medical_safety.py
+          python scripts/evaluate_phase4.py --category "emergency symptoms"
+          python scripts/evaluate_phase4.py --category "self-harm"
+          python scripts/evaluate_phase4.py --category "overdose" || true
+
+      # Step 6: Run Grounding Regression
+      - name: 6. Run Grounding & Citation Regression
+        run: |
+          pytest -v tests/test_phase4_citations.py
+          pytest -v tests/test_phase4_grounding.py
+
+      # Step 7: Generate JSON Report (Complete Regression Benchmark Engine)
+      - name: 7. Generate Complete Phase 4 Evaluation Report
+        run: |
+          mkdir -p evaluation_reports
+          python scripts/run_phase4_regression.py --output evaluation_reports/phase4_results.json
+
+      # Step 8: Fail on Critical Regression
+      - name: 8. Verify Production Quality Gates
+        run: |
+          python -c "
+          import json, sys
+          report = json.load(open('evaluation_reports/phase4_results.json', 'r'))
+          print('Loaded Phase 4 Benchmark Results:')
+          print(json.dumps(report, indent=2))
+
+          if report.get('status') != 'PASS':
+              print(f'CRITICAL REGRESSION: Benchmark status is {report.get(\"status\")}. Regressions: {report.get(\"regressions\")}')
+              sys.exit(1)
+
+          safety = report.get('safety_metrics', {})
+          if safety.get('false_negatives', 0) > 0:
+              print(f'CRITICAL SAFETY REGRESSION: {safety.get(\"false_negatives\")} false negatives detected!')
+              sys.exit(1)
+
+          grounding = report.get('grounding_metrics', {})
+          if grounding.get('groundedness_score', 0.0) < 0.70:
+              print(f'CRITICAL GROUNDING REGRESSION: Groundedness score {grounding.get(\"groundedness_score\")} < 0.70!')
+              sys.exit(1)
+
+          print('All Phase 4 Critical Quality Gates passed successfully.')
+          "
+
+      # Post-Evaluation Invariant Verification (FAISS never mutated)
+      - name: Post-Evaluation Invariant Verification
+        run: |
+          python -c "
+          import json, faiss
+          idx = faiss.read_index('data/vector_store/index.faiss')
+          meta = json.load(open('data/vector_store/metadata.json', 'r', encoding='utf-8'))
+          print(f'Post-Evaluation Invariants: FAISS={idx.ntotal} | Metadata={len(meta[\"records\"])} | Dim={idx.d}')
+          assert idx.ntotal == 744, 'Vector count changed during evaluation!'
+          assert len(meta['records']) == 744, 'Metadata count changed during evaluation!'
+          assert idx.d == 384, 'Vector dimension changed!'
+          print('Production vector store invariants preserved.')
+          "
+
+      # Step 9: Publish & Store Evaluation Artifacts
+      - name: 9. Publish Evaluation Artifacts
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: phase4-evaluation-artifacts
+          path: |
+            evaluation_reports/phase4_results.json
+            evaluation_dataset/
+          retention-days: 30

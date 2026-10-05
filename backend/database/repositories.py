@@ -189,6 +189,17 @@ class ConversationRepository:
         return query.order_by(Conversation.updated_at.desc()).offset(skip).limit(limit).all()
 
     @staticmethod
+    def update_title(db: Session, conversation_id: int, new_title: str) -> Optional[Conversation]:
+        """Updates the title of an existing conversation session."""
+        conv = db.query(Conversation).filter(Conversation.id == conversation_id).first()
+        if not conv:
+            return None
+        conv.title = new_title.strip()
+        db.commit()
+        db.refresh(conv)
+        return conv
+
+    @staticmethod
     def delete(db: Session, conversation_id: int) -> bool:
         conv = db.query(Conversation).filter(Conversation.id == conversation_id).first()
         if not conv:

@@ -89,9 +89,9 @@ USER appuser
 # Expose API service port
 EXPOSE 8000
 
-# Container healthcheck using /health endpoint
+# Container healthcheck using /health/live endpoint
 HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
-    CMD curl -f http://localhost:8000/health || exit 1
+    CMD curl -f http://localhost:8000/health/live || exit 1
 
 # Production startup command
 CMD ["python", "-m", "uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "2"]

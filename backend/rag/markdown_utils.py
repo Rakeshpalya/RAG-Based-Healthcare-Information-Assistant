@@ -65,7 +65,10 @@ def clean_ai_markdown(text: Optional[str]) -> str:
     # 9. Clean up any heading lines with leading/trailing artifact whitespace
     cleaned = re.sub(r'^(#{1,6})\s+', r'\1 ', cleaned, flags=re.MULTILINE)
 
-    # 10. Normalize multiple blank lines down to maximum of two newlines
+    # 10. Remove empty orphan bullet points
+    cleaned = re.sub(r'^\s*[-*•]\s*$', '', cleaned, flags=re.MULTILINE)
+
+    # 11. Normalize multiple blank lines down to maximum of two newlines
     cleaned = re.sub(r'\n{3,}', '\n\n', cleaned)
 
     return cleaned.strip()

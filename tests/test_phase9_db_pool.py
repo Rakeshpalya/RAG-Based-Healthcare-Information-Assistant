@@ -4,6 +4,7 @@ Validates connection pool configuration, health probes, concurrency safety,
 and graceful shutdown.
 """
 
+import time
 import pytest
 from sqlalchemy import text
 from backend.database.database import (
@@ -32,7 +33,15 @@ def test_concurrent_session_checkout():
     try:
         for _ in range(5):
             s = factory()
-            res = s.execute(text("SELECT 1")).scalar()
+            res = None
+            for attempt in range(3):
+                try:
+                    res = s.execute(text("SELECT 1")).scalar()
+                    break
+                except Exception:
+                    if attempt == 2:
+                        raise
+                    time.sleep(0.5)
             assert res == 1
             sessions.append(s)
     finally:

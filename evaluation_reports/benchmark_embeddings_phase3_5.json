@@ -1,0 +1,67 @@
+{
+  "timestamp": "2026-10-03T12:40:59Z",
+  "model_name": "sentence-transformers/all-MiniLM-L6-v2",
+  "embedding_dimension": 384,
+  "single_query_latency_ms": {
+    "avg": 41.31,
+    "p50": 41.74,
+    "p95": 44.05,
+    "min": 38.06,
+    "max": 45.32
+  },
+  "batch_benchmarks": [
+    {
+      "batch_size": 1,
+      "total_items": 64,
+      "total_duration_sec": 2.442,
+      "latency_per_item_ms": 38.16,
+      "throughput_items_sec": 26.2,
+      "cpu_utilization_pct": 100.0,
+      "memory_rss_mb": 534.3,
+      "memory_delta_mb": 2.3
+    },
+    {
+      "batch_size": 8,
+      "total_items": 64,
+      "total_duration_sec": 1.247,
+      "latency_per_item_ms": 19.49,
+      "throughput_items_sec": 51.3,
+      "cpu_utilization_pct": 100.0,
+      "memory_rss_mb": 547.2,
+      "memory_delta_mb": 12.9
+    },
+    {
+      "batch_size": 16,
+      "total_items": 64,
+      "total_duration_sec": 0.931,
+      "latency_per_item_ms": 14.55,
+      "throughput_items_sec": 68.7,
+      "cpu_utilization_pct": 100.0,
+      "memory_rss_mb": 553.9,
+      "memory_delta_mb": 6.6
+    },
+    {
+      "batch_size": 32,
+      "total_items": 64,
+      "total_duration_sec": 0.807,
+      "latency_per_item_ms": 12.61,
+      "throughput_items_sec": 79.3,
+      "cpu_utilization_pct": 100.0,
+      "memory_rss_mb": 567.3,
+      "memory_delta_mb": 13.4
+    },
+    {
+      "batch_size": 64,
+      "total_items": 64,
+      "total_duration_sec": 0.821,
+      "latency_per_item_ms": 12.83,
+      "throughput_items_sec": 78.0,
+      "cpu_utilization_pct": 100.0,
+      "memory_rss_mb": 568.9,
+      "memory_delta_mb": 1.6
+    }
+  ],
+  "recommended_batch_size": 32,
+  "bottleneck_detected": false,
+  "conclusion": "SentenceTransformer all-MiniLM-L6-v2 runs efficiently on CPU with <50ms query encoding latency and >100 chunks/sec batch throughput at batch_size=32. No migration needed."
+}

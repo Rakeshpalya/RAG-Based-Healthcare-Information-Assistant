@@ -1,0 +1,57 @@
+{
+  "Scenario_E_First_Request": {
+    "total_latency_ms": 6065.78,
+    "retrieval_latency_ms": 338.774,
+    "llm_latency_ms": 2024.6,
+    "cache_hit": false,
+    "llm_called": true,
+    "citations_valid": true,
+    "status": "success"
+  },
+  "Scenario_B_Cached_Request": {
+    "total_latency_ms": 12.44,
+    "cache_lookup_latency_ms": 12.44,
+    "llm_latency_ms": 0.0,
+    "cache_hit": true,
+    "llm_called": false,
+    "llm_calls_avoided": 1,
+    "status": "success",
+    "sources_count": 1
+  },
+  "Scenario_C_Streaming_Request": {
+    "total_latency_ms": 5120.09,
+    "time_to_first_event_ms": 0.05,
+    "time_to_first_token_ms": 5119.99,
+    "events_count": 61,
+    "tokens_count": 56,
+    "llm_called": true
+  },
+  "Scenario_D_Unsupported_Query": {
+    "total_latency_ms": 30.31,
+    "retrieval_latency_ms": 27.238,
+    "llm_latency_ms": 0.0,
+    "llm_called": false,
+    "llm_calls_avoided": 1,
+    "status": "no_relevant_context"
+  },
+  "Scenario_A_Non_Streaming_Baseline": {
+    "total_latency_ms": 4597.07,
+    "retrieval_latency_ms": 29.295,
+    "llm_latency_ms": 1517.06,
+    "cache_hit": false,
+    "llm_called": true,
+    "status": "success"
+  },
+  "Cache_Statistics": {
+    "enabled": true,
+    "total_entries": 1,
+    "max_entries": 1000,
+    "ttl_seconds": 3600,
+    "hits": 1,
+    "misses": 4,
+    "hit_rate": 0.2,
+    "evictions": 0,
+    "expirations": 0,
+    "prompt_version": "v3.3.0"
+  }
+}

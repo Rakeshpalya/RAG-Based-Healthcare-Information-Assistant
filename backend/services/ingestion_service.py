@@ -257,6 +257,13 @@ class DocumentIngestionService:
                 detail="Failed to store document chunks in relational database.",
             )
 
+        # Invalidate LLM cache for this user on new document ingestion
+        try:
+            from backend.services.llm_cache_service import get_llm_cache_service
+            get_llm_cache_service().delete_by_user(user.id)
+        except Exception:
+            pass
+
         # ----------------------------------------------------------------------
         # 10. Structured API Response
         # ----------------------------------------------------------------------

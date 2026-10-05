@@ -94,12 +94,11 @@ def render_documents_page(set_page_fn: Optional[Callable[[str], None]] = None):
                         st.rerun()
 
                 if do_upload:
-                    status_placeholder = st.empty()
-                    with status_placeholder.container():
-                        st.info("Step 1/3: Validating and uploading PDF...")
-                        res = api_client.upload_document(uploaded_file)
+                    prog_bar = st.progress(20, text="Step 1/3: Validating PDF structure and transmitting file...")
+                    res = api_client.upload_document(uploaded_file)
 
                     if res.get("success"):
+                        prog_bar.progress(70, text="Step 2/3: Extracting text, generating 384-d embeddings & indexing FAISS...")
                         data = res.get("data", {})
                         doc_id = data.get("document_id")
                         doc_filename = data.get("filename", filename)
@@ -110,8 +109,8 @@ def render_documents_page(set_page_fn: Optional[Callable[[str], None]] = None):
                         if doc_id:
                             st.session_state.selected_document_id = doc_id
 
-                        status_placeholder.empty()
-                        st.success("✓ Ingestion Completed: Document indexed into your healthcare knowledge base!")
+                        prog_bar.progress(100, text="Step 3/3: Document ingestion and indexing complete!")
+                        st.success("✓ Ingestion Completed: Document successfully indexed into your private healthcare knowledge base!")
 
                         # Structured Ingestion Summary Card
                         st.markdown(
@@ -204,6 +203,7 @@ def render_documents_page(set_page_fn: Optional[Callable[[str], None]] = None):
                     created_at = format_timestamp(active_doc.get("created_at"))
                     size_bytes = format_bytes(active_doc.get("file_size_bytes"))
 
+                    doc_status = active_doc.get("status", "processed").capitalize()
                     st.markdown(
                         f"""
                         <div class="health-card" style="margin-bottom: 16px;">
@@ -215,6 +215,7 @@ def render_documents_page(set_page_fn: Optional[Callable[[str], None]] = None):
                             </h2>
                             <div style="font-size: 0.86rem; color: var(--text-secondary); line-height: 1.8;">
                                 • <strong>Document ID:</strong> <code>{d_id}</code><br/>
+                                • <strong>Status:</strong> <span style="color: var(--emerald-success); font-weight: 700;">● {doc_status}</span><br/>
                                 • <strong>Uploaded:</strong> {created_at}<br/>
                                 • <strong>File Size:</strong> {size_bytes}<br/>
                                 • <strong>Pages:</strong> {pages} • <strong>Indexed Chunks:</strong> {chunks}
@@ -224,12 +225,45 @@ def render_documents_page(set_page_fn: Optional[Callable[[str], None]] = None):
                         unsafe_allow_html=True
                     )
 
-                    if st.button("💬 Research This Document in Chat →", key="btn_chat_with_doc", type="primary", use_container_width=True):
-                        if set_page_fn:
-                            set_page_fn("Research Chat")
-                        else:
-                            st.session_state.current_page = "Research Chat"
-                        st.rerun()
+                    col_doc_act1, col_doc_act2 = st.columns([3, 1])
+                    with col_doc_act1:
+                        if st.button("💬 Research This Document in Chat →", key="btn_chat_with_doc", type="primary", use_container_width=True):
+                            if set_page_fn:
+                                set_page_fn("Research Chat")
+                            else:
+                                st.session_state.current_page = "Research Chat"
+                            st.rerun()
+
+                    with col_doc_act2:
+                        if st.button("🗑️ Delete", key=f"btn_del_doc_{d_id}", type="secondary", use_container_width=True, help="Delete this document"):
+                            st.session_state[f"confirm_delete_doc_{d_id}"] = True
+                            st.rerun()
+
+                    if st.session_state.get(f"confirm_delete_doc_{d_id}", False):
+                        st.markdown(
+                            f"""
+                            <div class="history-danger-box">
+                                <strong>⚠️ Confirm Deletion:</strong> Are you sure you want to permanently delete <code>{fname}</code>?<br/>
+                                This will remove its metadata and knowledge chunks from your private repository.
+                            </div>
+                            """,
+                            unsafe_allow_html=True
+                        )
+                        c_yes, c_no = st.columns(2)
+                        with c_yes:
+                            if st.button("Yes, Delete Document", key=f"btn_confirm_del_{d_id}", type="primary", use_container_width=True):
+                                del_res = api_client.delete_document(d_id)
+                                st.session_state[f"confirm_delete_doc_{d_id}"] = False
+                                if del_res.get("success"):
+                                    st.session_state.selected_document_id = None
+                                    st.success(f"Document '{fname}' deleted successfully.")
+                                else:
+                                    st.error(del_res.get("error", "Failed to delete document."))
+                                st.rerun()
+                        with c_no:
+                            if st.button("Cancel", key=f"btn_cancel_del_{d_id}", type="secondary", use_container_width=True):
+                                st.session_state[f"confirm_delete_doc_{d_id}"] = False
+                                st.rerun()
 
                     # Fetch document details including chunks
                     doc_details = api_client.get_document(d_id)

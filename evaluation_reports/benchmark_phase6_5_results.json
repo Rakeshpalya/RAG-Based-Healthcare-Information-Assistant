@@ -1,0 +1,64 @@
+{
+  "timestamp_iso": "2026-10-05T04:30:34Z",
+  "benchmark_type": "Phase 6.5 Clinical Citation & Attribution",
+  "iterations": 200,
+  "throughput_ops_per_sec": 0.4,
+  "citation_attribution_overhead": {
+    "mean_ms": 0.9,
+    "p50_ms": 0.743,
+    "p95_ms": 1.607,
+    "p99_ms": 1.994,
+    "min_ms": 0.527,
+    "max_ms": 2.512
+  },
+  "component_breakdown": {
+    "bracket_and_spoofing_detection": {
+      "mean_ms": 0.051,
+      "p50_ms": 0.042,
+      "p95_ms": 0.095,
+      "p99_ms": 0.116,
+      "min_ms": 0.024,
+      "max_ms": 0.136
+    },
+    "claim_segmentation": {
+      "mean_ms": 0.351,
+      "p50_ms": 0.284,
+      "p95_ms": 0.614,
+      "p99_ms": 0.771,
+      "min_ms": 0.199,
+      "max_ms": 1.151
+    },
+    "evidence_attribution": {
+      "mean_ms": 0.9,
+      "p50_ms": 0.743,
+      "p95_ms": 1.607,
+      "p99_ms": 1.994,
+      "min_ms": 0.527,
+      "max_ms": 2.512
+    },
+    "unsupported_claim_pruning": {
+      "mean_ms": 0.064,
+      "p50_ms": 0.057,
+      "p95_ms": 0.113,
+      "p99_ms": 0.14,
+      "min_ms": 0.041,
+      "max_ms": 0.192
+    },
+    "synthesis_engine_integration": {
+      "mean_ms": 2565.732,
+      "p50_ms": 2436.836,
+      "p95_ms": 3571.509,
+      "p99_ms": 4061.146,
+      "min_ms": 1840.161,
+      "max_ms": 6433.498
+    }
+  },
+  "target_p95_threshold_ms": 5.0,
+  "target_met": true,
+  "production_invariants": {
+    "faiss_vector_count": 744,
+    "metadata_record_count": 744,
+    "embedding_dimension": 384,
+    "invariants_intact": true
+  }
+}

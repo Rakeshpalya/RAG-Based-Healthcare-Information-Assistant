@@ -1,0 +1,33 @@
+{
+  "timestamp": "2026-10-04 22:40:00",
+  "benchmark_environment": {
+    "os": "win32",
+    "python_version": "3.13.3 (tags/v3.13.3:6280bb5, Apr  8 2025, 14:47:33) [MSC v.1943 64 bit (AMD64)]"
+  },
+  "query_planning": {
+    "iterations": 100,
+    "total_invocations": 1200,
+    "p50_ms": 0.2049,
+    "p95_ms": 0.3195,
+    "p99_ms": 0.731,
+    "avg_ms": 0.2032,
+    "min_ms": 0.0086,
+    "max_ms": 6.1297,
+    "meets_target_5ms": true
+  },
+  "query_expansion": {
+    "iterations": 100,
+    "p50_ms": 0.1464,
+    "p95_ms": 0.2407,
+    "max_expansions_count": 4,
+    "bounded_under_4": true,
+    "meets_target_2ms": true
+  },
+  "adaptive_retrieval": {
+    "chunk_weighting_p95_ms": 0.2651,
+    "multi_doc_selection_p95_ms": 0.0659
+  },
+  "summary": {
+    "all_criteria_passed": true
+  }
+}

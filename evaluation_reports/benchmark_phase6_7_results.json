@@ -1,0 +1,84 @@
+{
+  "benchmark": "Phase 6.7: Clinical Decision Support, Uncertainty Calibration & Care Pathways",
+  "timestamp": "2026-10-05T06:56:12Z",
+  "iterations": 200,
+  "total_benchmark_time_seconds": 1811.142,
+  "throughput_evaluations_per_second": 0.1,
+  "latency_metrics": {
+    "uncertainty_calibration": {
+      "mean_ms": 0.015,
+      "p50_ms": 0.013,
+      "p95_ms": 0.026,
+      "p99_ms": 0.037,
+      "max_ms": 0.187,
+      "min_ms": 0.008
+    },
+    "risk_stratification": {
+      "mean_ms": 0.004,
+      "p50_ms": 0.004,
+      "p95_ms": 0.008,
+      "p99_ms": 0.014,
+      "max_ms": 0.016,
+      "min_ms": 0.002
+    },
+    "red_flag_screening": {
+      "mean_ms": 0.022,
+      "p50_ms": 0.021,
+      "p95_ms": 0.037,
+      "p99_ms": 0.055,
+      "max_ms": 0.14,
+      "min_ms": 0.012
+    },
+    "actionable_recommendations": {
+      "mean_ms": 0.011,
+      "p50_ms": 0.01,
+      "p95_ms": 0.022,
+      "p99_ms": 0.032,
+      "max_ms": 0.082,
+      "min_ms": 0.006
+    },
+    "agentic_follow_ups": {
+      "mean_ms": 0.002,
+      "p50_ms": 0.002,
+      "p95_ms": 0.004,
+      "p99_ms": 0.007,
+      "max_ms": 0.009,
+      "min_ms": 0.001
+    },
+    "sbar_clinical_handoff": {
+      "mean_ms": 0.019,
+      "p50_ms": 0.016,
+      "p95_ms": 0.036,
+      "p99_ms": 0.076,
+      "max_ms": 0.187,
+      "min_ms": 0.009
+    },
+    "end_to_end_decision_support_evaluate": {
+      "mean_ms": 0.067,
+      "p50_ms": 0.065,
+      "p95_ms": 0.136,
+      "p99_ms": 0.156,
+      "max_ms": 0.197,
+      "min_ms": 0.035
+    },
+    "full_synthesis_integration": {
+      "mean_ms": 9055.566,
+      "p50_ms": 788.937,
+      "p95_ms": 1228.649,
+      "p99_ms": 3795.056,
+      "max_ms": 1634372.395,
+      "min_ms": 592.124
+    }
+  },
+  "target_compliance": {
+    "target_p95_ms": 5.0,
+    "actual_p95_ms": 0.136,
+    "passed": true
+  },
+  "invariants_verified": {
+    "faiss_vector_count": 744,
+    "metadata_record_count": 744,
+    "embedding_dimension": 384,
+    "all_invariants_preserved": true
+  }
+}

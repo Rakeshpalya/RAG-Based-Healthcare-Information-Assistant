@@ -150,7 +150,47 @@ def render_dashboard_page(set_page_fn: Optional[Callable[[str], None]] = None):
 
     st.markdown("<div style='height: 24px;'></div>", unsafe_allow_html=True)
 
-    # 4. QUICK ACTIONS (4 Cards, All Functional)
+    # 4. QUICK AI QUESTION (5.2 Requirement)
+    st.markdown(
+        """
+        <div class="health-card" style="margin-bottom: 24px; padding: 1.5rem 1.8rem;">
+            <div style="font-size: 0.78rem; font-weight: 700; color: var(--teal-primary); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 4px;">
+                Instant Knowledge Base Query
+            </div>
+            <h3 style="font-size: 1.25rem; font-weight: 800; color: var(--text-primary); margin: 0 0 6px 0;">
+                💡 Quick Clinical AI Question
+            </h3>
+            <p style="font-size: 0.88rem; color: var(--text-secondary); margin: 0 0 14px 0;">
+                Ask any clinical inquiry grounded directly in your uploaded reference documents and clinical guidelines.
+            </p>
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
+
+    with st.form("form_quick_question", clear_on_submit=True):
+        col_q_in, col_q_btn = st.columns([5, 1])
+        with col_q_in:
+            quick_q = st.text_input(
+                "Clinical Question",
+                placeholder="e.g., What are the primary diagnostic criteria for hypertension?",
+                label_visibility="collapsed",
+                key="dash_quick_question_input"
+            )
+        with col_q_btn:
+            submitted_q = st.form_submit_button("Ask AI →", type="primary", use_container_width=True)
+
+        if submitted_q and quick_q.strip():
+            st.session_state.pending_quick_query = quick_q.strip()
+            if set_page_fn:
+                set_page_fn("Research Chat")
+            else:
+                st.session_state.current_page = "Research Chat"
+            st.rerun()
+
+    st.markdown("<div style='height: 16px;'></div>", unsafe_allow_html=True)
+
+    # 5. QUICK ACTIONS (4 Cards, All Functional)
     st.markdown(
         """
         <div style="font-size: 1.15rem; font-weight: 700; color: var(--text-primary); margin-bottom: 12px;">

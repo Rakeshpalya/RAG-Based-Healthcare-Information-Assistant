@@ -1,0 +1,58 @@
+{
+  "timestamp_iso": "2026-10-05T03:42:16Z",
+  "benchmark_type": "Phase 6.4 Clinical Answer Synthesis",
+  "iterations": 200,
+  "llm_mocked": true,
+  "llm_mocked_reason": "Isolate deterministic engine overhead from cloud API latency",
+  "throughput_ops_per_sec": 94.3,
+  "end_to_end_synthesis_overhead": {
+    "mean_ms": 10.58,
+    "p50_ms": 0.111,
+    "p95_ms": 0.143,
+    "p99_ms": 0.325,
+    "min_ms": 0.103,
+    "max_ms": 2092.565
+  },
+  "component_breakdown": {
+    "answer_preparation": {
+      "mean_ms": 0.001,
+      "p50_ms": 0.001,
+      "p95_ms": 0.001,
+      "p99_ms": 0.003,
+      "min_ms": 0.0,
+      "max_ms": 0.012
+    },
+    "prompt_construction": {
+      "mean_ms": 0.005,
+      "p50_ms": 0.004,
+      "p95_ms": 0.006,
+      "p99_ms": 0.025,
+      "min_ms": 0.004,
+      "max_ms": 0.05
+    },
+    "confidence_calculation": {
+      "mean_ms": 0.001,
+      "p50_ms": 0.001,
+      "p95_ms": 0.001,
+      "p99_ms": 0.006,
+      "min_ms": 0.001,
+      "max_ms": 0.012
+    },
+    "section_parsing": {
+      "mean_ms": 0.013,
+      "p50_ms": 0.012,
+      "p95_ms": 0.014,
+      "p99_ms": 0.022,
+      "min_ms": 0.011,
+      "max_ms": 0.09
+    }
+  },
+  "target_p95_threshold_ms": 5.0,
+  "target_met": true,
+  "production_invariants": {
+    "faiss_vector_count": 744,
+    "metadata_record_count": 744,
+    "embedding_dimension": 384,
+    "invariants_intact": true
+  }
+}

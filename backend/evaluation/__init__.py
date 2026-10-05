@@ -10,6 +10,14 @@ from backend.evaluation.retrieval_evaluator import (
     QueryEvaluationResult,
     AggregateRetrievalMetrics,
 )
+from backend.evaluation.recall_evaluator import (
+    RecallEvaluator,
+    QueryRecallResult,
+    AggregateRecallMetrics,
+    BenchmarkQuery,
+    HYPERTENSION_LIFESTYLE_BENCHMARK,
+    compute_concept_recall_at_k,
+)
 from backend.evaluation.citation_validator import (
     CitationValidator,
     CitationValidationResult,
@@ -49,6 +57,13 @@ from backend.evaluation.evaluation_runner import (
     EvaluationRunner,
     EvaluationReport,
 )
+from backend.evaluation.generation_evaluator import (
+    GenerationEvaluator,
+    GenerationEvaluationResult,
+    GenerationAggregateMetrics,
+    GOLDEN_GENERATION_BENCHMARK,
+    STANDARDIZED_FALLBACK_PHRASE,
+)
 
 __all__ = [
     "RetrievalEvaluator",
@@ -84,4 +99,15 @@ __all__ = [
     "sanitize_log_dict",
     "EvaluationRunner",
     "EvaluationReport",
+    "RecallEvaluator",
+    "QueryRecallResult",
+    "AggregateRecallMetrics",
+    "BenchmarkQuery",
+    "HYPERTENSION_LIFESTYLE_BENCHMARK",
+    "compute_concept_recall_at_k",
+    "GenerationEvaluator",
+    "GenerationEvaluationResult",
+    "GenerationAggregateMetrics",
+    "GOLDEN_GENERATION_BENCHMARK",
+    "STANDARDIZED_FALLBACK_PHRASE",
 ]

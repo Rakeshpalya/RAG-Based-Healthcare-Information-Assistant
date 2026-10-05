@@ -232,14 +232,15 @@ class VectorStoreService:
                     continue
                 record = self.metadata_store[idx]
 
-                # Apply user ownership filter if requested:
-                # Chunks with matching user_id or shared public chunks (user_id is None) are permitted.
+                # Apply strict user ownership isolation:
+                # When user_id is provided, User A cannot access User B's documents.
                 if user_id is not None:
                     rec_user_id = record.get("user_id")
                     if rec_user_id is None:
                         rec_user_id = record.get("metadata", {}).get("user_id")
                     if rec_user_id is not None and str(rec_user_id) != str(user_id):
                         continue
+
 
                 # Ensure candidate pool is not monopolized by identical duplicate chunk vectors
                 c_norm = " ".join(record.get("text", "").strip().split())

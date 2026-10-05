@@ -822,6 +822,29 @@ div[data-testid="stChatMessage"]:has([data-testid="chatAvatarIcon-assistant"]) {
     border-left: 4px solid var(--teal-primary) !important;
 }
 
+/* Assistant Chat Message List & Bullet Styling */
+div[data-testid="stChatMessage"] div[data-testid="stMarkdownContainer"] ul,
+div[data-testid="stChatMessage"] div[data-testid="stMarkdownContainer"] ol {
+    color: var(--text-primary) !important;
+    margin: 0.6rem 0 0.8rem 1.25rem !important;
+    padding-left: 0.5rem !important;
+}
+
+div[data-testid="stChatMessage"] div[data-testid="stMarkdownContainer"] li {
+    color: var(--text-primary) !important;
+    font-size: 0.95rem !important;
+    line-height: 1.65 !important;
+    margin-bottom: 0.35rem !important;
+    opacity: 1 !important;
+    visibility: visible !important;
+}
+
+div[data-testid="stChatMessage"] div[data-testid="stMarkdownContainer"] li::marker {
+    color: var(--teal-primary) !important;
+    font-size: 1rem !important;
+}
+
+
 /* Evidence Source Cards */
 .evidence-card {
     background-color: var(--bg-card);
@@ -1229,4 +1252,116 @@ div.st-key-healthai_input_row div[data-testid="stFormSubmitButton"] button:hover
     border-color: #2DD4BF !important;
 }
 
+/* =============================================================================
+   12. MEDICAL SAFETY UX & DISTINCT VISUAL TREATMENT (5.7)
+   ============================================================================= */
 
+/* Acute Medical Emergency (911) */
+.safety-card-emergency {
+    background: linear-gradient(135deg, rgba(239, 68, 68, 0.12) 0%, rgba(185, 28, 28, 0.08) 100%);
+    border: 2px solid #EF4444;
+    border-left: 6px solid #DC2626;
+    border-radius: var(--radius-md);
+    padding: 18px 22px;
+    margin: 16px 0;
+    box-shadow: 0 4px 16px rgba(239, 68, 68, 0.18);
+    color: #991B1B;
+}
+
+.safety-card-emergency h4 {
+    margin: 0 0 6px 0;
+    font-size: 1.15rem;
+    font-weight: 800;
+    color: #B91C1C;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+/* Self-Harm / Crisis Intervention (988 Lifeline) */
+.safety-card-crisis {
+    background: linear-gradient(135deg, rgba(147, 51, 234, 0.12) 0%, rgba(126, 34, 206, 0.08) 100%);
+    border: 2px solid #A855F7;
+    border-left: 6px solid #9333EA;
+    border-radius: var(--radius-md);
+    padding: 18px 22px;
+    margin: 16px 0;
+    box-shadow: 0 4px 16px rgba(147, 51, 234, 0.18);
+    color: #581C87;
+}
+
+.safety-card-crisis h4 {
+    margin: 0 0 6px 0;
+    font-size: 1.15rem;
+    font-weight: 800;
+    color: #6B21A8;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+/* Medication Prescribing Safety Boundary */
+.safety-card-medication {
+    background: linear-gradient(135deg, rgba(245, 158, 11, 0.12) 0%, rgba(217, 119, 6, 0.08) 100%);
+    border: 2px solid #F59E0B;
+    border-left: 6px solid #D97706;
+    border-radius: var(--radius-md);
+    padding: 16px 20px;
+    margin: 14px 0;
+    box-shadow: 0 4px 14px rgba(245, 158, 11, 0.15);
+    color: #78350F;
+}
+
+.safety-card-medication h4 {
+    margin: 0 0 6px 0;
+    font-size: 1.08rem;
+    font-weight: 800;
+    color: #92400E;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+/* Insufficient Reference Evidence */
+.safety-card-insufficient {
+    background: linear-gradient(135deg, rgba(2, 132, 199, 0.10) 0%, rgba(14, 165, 233, 0.06) 100%);
+    border: 1.5px solid #38BDF8;
+    border-left: 5px solid #0284C7;
+    border-radius: var(--radius-md);
+    padding: 16px 20px;
+    margin: 14px 0;
+    box-shadow: 0 2px 10px rgba(2, 132, 199, 0.10);
+    color: #0369A1;
+}
+
+.safety-card-insufficient h4 {
+    margin: 0 0 6px 0;
+    font-size: 1.05rem;
+    font-weight: 800;
+    color: #075985;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+/* General Medical Disclaimer Box */
+.safety-card-disclaimer {
+    background-color: var(--bg-surface-subtle);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-sm);
+    padding: 10px 14px;
+    margin-top: 14px;
+    font-size: 0.80rem;
+    color: var(--text-muted);
+    line-height: 1.5;
+}
+
+/* Chat Empty State */
+.chat-empty-state {
+    text-align: center;
+    padding: 3rem 1.5rem;
+    background-color: var(--bg-card);
+    border: 1px dashed var(--border-card);
+    border-radius: var(--radius-lg);
+    margin: 1.5rem 0;
+}

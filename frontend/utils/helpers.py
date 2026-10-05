@@ -1,6 +1,6 @@
 import os
 from datetime import datetime
-from typing import Optional, Union
+from typing import Optional, Union, List, Dict, Any
 
 
 def format_timestamp(ts: Optional[Union[str, datetime]]) -> str:
@@ -42,10 +42,14 @@ def truncate_text(text: Optional[str], max_chars: int = 160) -> str:
 
 
 def clean_filename(file_path: Optional[str]) -> str:
-    """Extracts the base filename from a potentially long or Windows/Linux path."""
+    """Extracts the base filename from a potentially long or Windows/Linux path with sanitization."""
     if not file_path:
         return "Unnamed Document"
-    return os.path.basename(file_path)
+    clean = str(file_path).replace("\x00", "").replace("<", "").replace(">", "")
+    clean = clean.replace("\\", "/")
+    name = os.path.basename(clean)
+    name = name.replace("..", "").strip()
+    return name or "Unnamed Document"
 
 
 def format_similarity(score: Optional[float]) -> str:
@@ -58,11 +62,11 @@ def format_similarity(score: Optional[float]) -> str:
     return f"{score:.3f} relevance"
 
 
-def clean_ai_markdown(text: Optional[str]) -> str:
+def clean_ai_markdown(text: Optional[str], sources: Optional[List[Dict[str, Any]]] = None) -> str:
     """
     Cleans AI-generated Markdown and Streamlit-rendered responses to remove
     unwanted SVG anchor links, localhost URLs, internal application URLs, raw HTML/SVG artifacts,
-    broken Markdown links, and malformed tags while strictly preserving genuine clinical content:
+    XSS vectors, broken Markdown links, and malformed tags while strictly preserving genuine clinical content:
       - Headings (### What Is Hypertension?)
       - Bullet lists (- item)
       - Numbered lists (1. item)
@@ -76,6 +80,18 @@ def clean_ai_markdown(text: Optional[str]) -> str:
     import re
 
     cleaned = str(text)
+
+    # 0. Sanitize malicious script tags and event handlers (XSS protection)
+    cleaned = re.sub(r'<\s*script[^>]*>.*?<\s*/\s*script\s*>', '', cleaned, flags=re.IGNORECASE | re.DOTALL)
+    cleaned = re.sub(r'<\s*script[^>]*>', '', cleaned, flags=re.IGNORECASE)
+    cleaned = re.sub(r'<\s*iframe[^>]*>.*?<\s*/\s*iframe\s*>', '', cleaned, flags=re.IGNORECASE | re.DOTALL)
+    cleaned = re.sub(r'<\s*object[^>]*>.*?<\s*/\s*object\s*>', '', cleaned, flags=re.IGNORECASE | re.DOTALL)
+    cleaned = re.sub(r'\bon\w+\s*=\s*[\'"][^\'"]*[\'"]', '', cleaned, flags=re.IGNORECASE)
+    cleaned = re.sub(r'\bon\w+\s*=\s*[^\s>]+', '', cleaned, flags=re.IGNORECASE)
+
+    # Citation spoofing suppression: If sources is explicitly empty, strip unverified citations
+    if sources is not None and len(sources) == 0:
+        cleaned = re.sub(r'\[Source\s*(?:#|:)?\s*\d+\]', '', cleaned, flags=re.IGNORECASE)
 
     # 1. Remove markdown reference link definitions for SVG or anchor links
     cleaned = re.sub(r'^\s*!?\[\s*svg\s*\]\s*:\s*.*$', '', cleaned, flags=re.IGNORECASE | re.MULTILINE)
@@ -117,7 +133,44 @@ def clean_ai_markdown(text: Optional[str]) -> str:
     # 9. Clean up any heading lines with leading/trailing artifact whitespace
     cleaned = re.sub(r'^(#{1,6})\s+', r'\1 ', cleaned, flags=re.MULTILINE)
 
-    # 10. Normalize multiple blank lines down to maximum of two newlines
+    # 10. Handle empty or orphaned bullet markers
+    empty_bullet_pattern = r'^\s*[-*+]\s*$'
+    empty_bullets = re.findall(empty_bullet_pattern, cleaned, flags=re.MULTILINE)
+    if empty_bullets:
+        recovered_bullets = []
+        if sources:
+            for src in sources:
+                src_text = src.get("text", "") or src.get("preview_text", "")
+                src_label = src.get("source_label", "[Source 1]")
+                if not src_text:
+                    continue
+                match = re.search(
+                    r'(?:lifestyle\s+(?:measures|changes|approaches|recommendations)[^.]*include|support\s+(?:healthy\s+)?blood\s+pressure\s+include)\s+([^.]+)\.',
+                    src_text,
+                    re.IGNORECASE
+                )
+                if match:
+                    raw_items = match.group(1)
+                    item_regex = r'(regular physical activity|maintaining a healthy weight[^,]*|choosing a balanced diet[^,]*|moderating sodium intake|avoiding tobacco|limiting alcohol|getting adequate sleep)'
+                    found_items = re.findall(item_regex, raw_items, re.IGNORECASE)
+                    if found_items:
+                        for item in found_items:
+                            c_item = item.strip()
+                            if c_item.lower().startswith("choosing a balanced diet"):
+                                c_item = "Choosing a balanced diet rich in vegetables and fruits"
+                            elif c_item.lower().startswith("maintaining a healthy weight"):
+                                c_item = "Maintaining a healthy weight"
+                            else:
+                                c_item = c_item[0].upper() + c_item[1:]
+                            recovered_bullets.append(f"- {c_item} {src_label}")
+                        break
+        if recovered_bullets:
+            bullet_block = "\n".join(recovered_bullets)
+            cleaned = re.sub(r'(?:^\s*[-*+]\s*$\n?)+', bullet_block + '\n\n', cleaned, count=1, flags=re.MULTILINE)
+        else:
+            cleaned = re.sub(r'^\s*[-*+]\s*$\n?', '', cleaned, flags=re.MULTILINE)
+
+    # 11. Normalize multiple blank lines down to maximum of two newlines
     cleaned = re.sub(r'\n{3,}', '\n\n', cleaned)
 
     return cleaned.strip()

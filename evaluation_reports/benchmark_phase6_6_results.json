@@ -1,0 +1,67 @@
+{
+  "benchmark_type": "Phase 6.6 Clinical Grounding Verification & Hallucination Guardrails",
+  "timestamp": "2026-10-05T05:25:53Z",
+  "iterations": 200,
+  "target_p95_ms": 5.0,
+  "target_met": true,
+  "throughput_cycles_per_sec": 0.63,
+  "verification_engine_stats": {
+    "mean_ms": 0.651,
+    "p50_ms": 0.506,
+    "p95_ms": 1.189,
+    "p99_ms": 1.529,
+    "min_ms": 0.345,
+    "max_ms": 3.398
+  },
+  "subcomponents": {
+    "entity_extraction": {
+      "mean_ms": 0.332,
+      "p50_ms": 0.264,
+      "p95_ms": 0.569,
+      "p99_ms": 0.838,
+      "min_ms": 0.185,
+      "max_ms": 1.82
+    },
+    "contradiction_checking": {
+      "mean_ms": 0.051,
+      "p50_ms": 0.045,
+      "p95_ms": 0.093,
+      "p99_ms": 0.201,
+      "min_ms": 0.026,
+      "max_ms": 0.24
+    },
+    "safety_sanitization": {
+      "mean_ms": 0.09,
+      "p50_ms": 0.076,
+      "p95_ms": 0.148,
+      "p99_ms": 0.248,
+      "min_ms": 0.052,
+      "max_ms": 0.498
+    },
+    "content_pruning": {
+      "mean_ms": 0.004,
+      "p50_ms": 0.003,
+      "p95_ms": 0.006,
+      "p99_ms": 0.01,
+      "min_ms": 0.002,
+      "max_ms": 0.019
+    },
+    "full_synthesis_integration": {
+      "mean_ms": 1579.461,
+      "p50_ms": 1153.178,
+      "p95_ms": 3160.547,
+      "p99_ms": 4112.385,
+      "min_ms": 937.945,
+      "max_ms": 4746.069
+    }
+  },
+  "production_invariants": {
+    "faiss_count": 744,
+    "expected_faiss": 744,
+    "meta_count": 744,
+    "expected_meta": 744,
+    "dimension": 384,
+    "expected_dim": 384,
+    "invariants_intact": true
+  }
+}

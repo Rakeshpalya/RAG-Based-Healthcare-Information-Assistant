@@ -1,0 +1,73 @@
+{
+  "timestamp": "2026-10-03T11:16:18Z",
+  "total_requests": 250,
+  "initial_rss_mb": 630.73,
+  "final_rss_mb": 636.56,
+  "rss_growth_mb": 5.83,
+  "initial_threads": 3,
+  "final_threads": 3,
+  "thread_leak_count": 0,
+  "initial_cpu_pct": 0.0,
+  "final_cpu_pct": 0.0,
+  "faiss_vectors": 744,
+  "faiss_dimension": 384,
+  "faiss_estimated_mem_mb": 1.09,
+  "cache_entries": 1,
+  "cache_max_entries": 1000,
+  "latencies": {
+    "avg_ms": 28.06,
+    "p50_ms": 20.3,
+    "p95_ms": 87.51,
+    "p99_ms": 97.27,
+    "min_ms": 15.88,
+    "max_ms": 290.33
+  },
+  "checkpoints": [
+    {
+      "iteration": 50,
+      "rss_mb": 635.67,
+      "rss_delta_from_baseline": 4.94,
+      "active_threads": 3,
+      "cache_entries": 1,
+      "status_code": 429
+    },
+    {
+      "iteration": 100,
+      "rss_mb": 636.0,
+      "rss_delta_from_baseline": 5.27,
+      "active_threads": 3,
+      "cache_entries": 1,
+      "status_code": 429
+    },
+    {
+      "iteration": 150,
+      "rss_mb": 636.15,
+      "rss_delta_from_baseline": 5.42,
+      "active_threads": 3,
+      "cache_entries": 1,
+      "status_code": 429
+    },
+    {
+      "iteration": 200,
+      "rss_mb": 636.41,
+      "rss_delta_from_baseline": 5.68,
+      "active_threads": 3,
+      "cache_entries": 1,
+      "status_code": 429
+    },
+    {
+      "iteration": 250,
+      "rss_mb": 636.55,
+      "rss_delta_from_baseline": 5.82,
+      "active_threads": 3,
+      "cache_entries": 1,
+      "status_code": 429
+    }
+  ],
+  "audit": {
+    "memory_leak_detected": false,
+    "unbounded_cache_growth_detected": false,
+    "thread_leak_detected": false,
+    "production_ready": true
+  }
+}
