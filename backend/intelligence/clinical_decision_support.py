@@ -116,7 +116,8 @@ class ClinicalDecisionSupportEngine:
         attribution_report: Optional[Any] = None,
         verification_result: Optional[Any] = None,
         query_plan: Optional[Any] = None,
-        safety_assessment: Optional[Any] = None
+        safety_assessment: Optional[Any] = None,
+        cumulative_profile: Optional[Any] = None
     ) -> ClinicalDecisionSupportResult:
         """
         Main Phase 6.7 decision support evaluation method.
@@ -145,7 +146,8 @@ class ClinicalDecisionSupportEngine:
             answer=norm_answer,
             safety_assessment=safety_assessment,
             verification_result=verification_result,
-            fused_evidence=fused_evidence
+            fused_evidence=fused_evidence,
+            cumulative_profile=cumulative_profile
         )
 
         # 3. Actionable Clinical Recommendations
@@ -161,7 +163,8 @@ class ClinicalDecisionSupportEngine:
         red_flags, red_flag_escalation = cls._identify_red_flags(
             query=norm_query,
             answer=norm_answer,
-            intent=norm_intent
+            intent=norm_intent,
+            cumulative_profile=cumulative_profile
         )
 
         # 5. Escalation Decision
@@ -345,7 +348,8 @@ class ClinicalDecisionSupportEngine:
         answer: str,
         safety_assessment: Optional[Any] = None,
         verification_result: Optional[Any] = None,
-        fused_evidence: Optional[Any] = None
+        fused_evidence: Optional[Any] = None,
+        cumulative_profile: Optional[Any] = None
     ) -> ClinicalRiskTier:
         """
         Determines the clinical risk tier based on intent, safety signals, and verification outcomes.
@@ -380,19 +384,36 @@ class ClinicalDecisionSupportEngine:
                 return ClinicalRiskTier.CRITICAL
 
 
-        # High Risk: Medication dosage, prescription therapy, drug interactions
+        # High Risk: Medication dosage, prescription therapy, drug interactions, or high-risk comorbidity
         if intent in ("DOSAGE_QUERY", "MEDICATION_QUERY"):
             return ClinicalRiskTier.HIGH
 
         if any(w in combined_text for w in ("prescribe", "dosage", "contraindication", "black box", "adverse reaction", "drug interaction")):
             return ClinicalRiskTier.HIGH
 
+        # Cumulative comorbidity risk elevation (Phase 6.9)
+        if cumulative_profile:
+            conds = getattr(cumulative_profile, "active_conditions", [])
+            conds_lower = {str(c).lower() for c in conds}
+            risks = getattr(cumulative_profile, "risk_factors", [])
+            high_risk_conds = {
+                "chronic kidney disease", "ckd", "renal failure", "renal impairment",
+                "heart failure", "cirrhosis", "liver failure", "coronary artery disease", "cad"
+            }
+            if bool(conds_lower & high_risk_conds) or "Pregnancy" in risks or len(conds) >= 2:
+                return ClinicalRiskTier.HIGH
+
         # Moderate Risk: Symptom queries, diagnostic stages, lab result evaluations
-        if intent in ("DIAGNOSIS_QUERY", "TREATMENT_QUERY", "LAB_RESULT_QUERY", "SYMPTOM_QUERY"):
+        if intent in ("DIAGNOSIS_QUERY", "TREATMENT_QUERY", "LAB_RESULT_QUERY", "SYMPTOM_QUERY", "SYMPTOM_ASSESSMENT"):
             return ClinicalRiskTier.MODERATE
 
         if any(w in combined_text for w in ("symptom", "diagnosis", "stage", "hypertension", "diabetes", "lab", "creatinine", "glucose")):
             return ClinicalRiskTier.MODERATE
+
+        if cumulative_profile:
+            conds = getattr(cumulative_profile, "active_conditions", [])
+            if len(conds) >= 1:
+                return ClinicalRiskTier.MODERATE
 
         # Low Risk: Document comparisons, prevention, lifestyle
         if intent in ("PREVENTION_QUERY", "DOCUMENT_COMPARISON"):
@@ -484,7 +505,8 @@ class ClinicalDecisionSupportEngine:
         cls,
         query: str,
         answer: str,
-        intent: str
+        intent: str,
+        cumulative_profile: Optional[Any] = None
     ) -> tuple[List[RedFlagTrigger], bool]:
         """
         Scans inquiry and clinical answer for red-flag warning criteria.
@@ -527,6 +549,22 @@ class ClinicalDecisionSupportEngine:
                     has_critical = True
                 elif rf.flag_id == "RF_RHABDO" and any(k in combined for k in ("rhabdo", "dark urine", "tea-colored", "muscle pain")):
                     matched_flags.append(rf)
+
+        # Check Cross-Turn Comorbidity Red Flags (Phase 6.9)
+        if cumulative_profile:
+            conds = getattr(cumulative_profile, "active_conditions", [])
+            conds_lower = {str(c).lower() for c in conds}
+            has_cardio = bool(conds_lower & {"coronary artery disease", "heart failure", "cad", "myocardial infarction", "angina"})
+            has_renal = bool(conds_lower & {"chronic kidney disease", "ckd", "renal failure", "renal impairment"})
+            has_hepatic = bool(conds_lower & {"cirrhosis", "liver failure", "hepatic impairment"})
+            if has_cardio or has_renal or has_hepatic or len(conds) >= 2:
+                matched_flags.append(RedFlagTrigger(
+                    flag_id="RF_COMORBIDITY",
+                    symptom_or_sign="Cumulative comorbidity: " + ", ".join(conds),
+                    clinical_rationale=f"Cumulative comorbidity identified: Patient with {', '.join(conds)} presenting with clinical symptoms.",
+                    action_required="Expedited physician evaluation and closer clinical monitoring recommended.",
+                    is_critical=False
+                ))
 
         # De-duplicate flags by flag_id
         unique_flags = {f.flag_id: f for f in matched_flags}

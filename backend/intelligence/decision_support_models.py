@@ -88,6 +88,15 @@ class RedFlagTrigger:
             "is_critical": bool(self.is_critical)
         }
 
+    def __contains__(self, item: str) -> bool:
+        item_lower = str(item).lower()
+        return (
+            item_lower in self.flag_id.lower()
+            or item_lower in self.symptom_or_sign.lower()
+            or item_lower in self.clinical_rationale.lower()
+            or item_lower in self.action_required.lower()
+        )
+
 
 @dataclass
 class ClinicalHandoffSummary:

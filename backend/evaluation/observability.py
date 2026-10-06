@@ -330,6 +330,12 @@ class ProductionMetricsCollector:
         self.orchestration_concordant_total: int = 0
         self.orchestration_intercepted_total: int = 0
 
+        # Longitudinal Context & Dialogue State counters (Phase 6.9)
+        self.context_resolution_total: int = 0
+        self.context_follow_up_total: int = 0
+        self.context_entities_tracked_total: int = 0
+        self.context_contraindications_flagged_total: int = 0
+
         # Latency samples (bounded deques in milliseconds)
         self.latencies_retrieval: deque = deque(maxlen=max_samples)
         self.latencies_cache: deque = deque(maxlen=max_samples)
@@ -345,6 +351,7 @@ class ProductionMetricsCollector:
         self.latencies_clinical_verification: deque = deque(maxlen=max_samples)
         self.latencies_decision_support: deque = deque(maxlen=max_samples)
         self.latencies_orchestration: deque = deque(maxlen=max_samples)
+        self.latencies_context_resolution: deque = deque(maxlen=max_samples)
 
     def record_intent_event(
         self,
@@ -661,6 +668,24 @@ class ProductionMetricsCollector:
             if latency_ms > 0:
                 self.latencies_orchestration.append(latency_ms)
 
+    def record_context_event(
+        self,
+        is_follow_up: bool = False,
+        prior_turns_used: int = 0,
+        entities_count: int = 0,
+        contraindications_count: int = 0,
+        latency_ms: float = 0.0
+    ) -> None:
+        """Records longitudinal clinical context telemetry with zero PHI (Phase 6.9)."""
+        with self._lock:
+            self.context_resolution_total += 1
+            if is_follow_up:
+                self.context_follow_up_total += 1
+            self.context_entities_tracked_total += max(0, int(entities_count))
+            self.context_contraindications_flagged_total += max(0, int(contraindications_count))
+            if latency_ms > 0:
+                self.latencies_context_resolution.append(latency_ms)
+
     def record_rag_event(self, event: RAGStructuredLogEvent) -> None:
         with self._lock:
             self.requests_total += 1
@@ -852,6 +877,13 @@ class ProductionMetricsCollector:
                         "concordant_total": self.orchestration_concordant_total,
                         "intercepted_total": self.orchestration_intercepted_total,
                         "latency": self._calc_stats(self.latencies_orchestration)
+                    },
+                    "longitudinal_context": {
+                        "total": self.context_resolution_total,
+                        "follow_up_total": self.context_follow_up_total,
+                        "entities_tracked_total": self.context_entities_tracked_total,
+                        "contraindications_flagged_total": self.context_contraindications_flagged_total,
+                        "latency": self._calc_stats(self.latencies_context_resolution)
                     }
                 },
                 "latency": {
@@ -863,6 +895,8 @@ class ProductionMetricsCollector:
                     "ttfe": self._calc_stats(self.latencies_ttfe)
                 }
             }
+
+    get_summary = get_metrics_snapshot
 
     def get_prometheus_exposition(self) -> str:
         """
@@ -1246,7 +1280,33 @@ class ProductionMetricsCollector:
 
             lines.extend(build_histogram("rag_orchestration_duration_seconds", "Clinical orchestration latency in seconds", self.latencies_orchestration))
 
+            # Longitudinal Clinical Context Metrics (Phase 6.9)
+            lines.append("")
+            lines.append("# HELP rag_context_resolution_total Total number of dialogue context resolutions")
+            lines.append("# TYPE rag_context_resolution_total counter")
+            lines.append(f"rag_context_resolution_total {self.context_resolution_total}")
+            lines.append("")
+
+            lines.append("# HELP rag_context_follow_up_total Total number of follow-up queries resolved")
+            lines.append("# TYPE rag_context_follow_up_total counter")
+            lines.append(f"rag_context_follow_up_total {self.context_follow_up_total}")
+            lines.append("")
+
+            lines.append("# HELP rag_context_entities_tracked_total Total clinical entities tracked across dialogue")
+            lines.append("# TYPE rag_context_entities_tracked_total counter")
+            lines.append(f"rag_context_entities_tracked_total {self.context_entities_tracked_total}")
+            lines.append("")
+
+            lines.append("# HELP rag_context_contraindications_flagged_total Total multi-turn contraindications flagged")
+            lines.append("# TYPE rag_context_contraindications_flagged_total counter")
+            lines.append(f"rag_context_contraindications_flagged_total {self.context_contraindications_flagged_total}")
+            lines.append("")
+
+            lines.extend(build_histogram("rag_context_resolution_duration_seconds", "Longitudinal context resolution latency in seconds", self.latencies_context_resolution))
+
             return "\n".join(lines) + "\n"
+
+    get_prometheus_metrics = get_prometheus_exposition
 
     def reset(self) -> None:
         with self._lock:
@@ -1320,7 +1380,15 @@ class ProductionMetricsCollector:
             self.decision_support_red_flags_total = 0
             self.decision_support_recommendations_total = 0
             self.latencies_decision_support.clear()
-
+            self.orchestration_total = 0
+            self.orchestration_concordant_total = 0
+            self.orchestration_intercepted_total = 0
+            self.latencies_orchestration.clear()
+            self.context_resolution_total = 0
+            self.context_follow_up_total = 0
+            self.context_entities_tracked_total = 0
+            self.context_contraindications_flagged_total = 0
+            self.latencies_context_resolution.clear()
 
 _metrics_collector = ProductionMetricsCollector()
 
@@ -1435,5 +1503,22 @@ def record_orchestration_event(
     get_metrics_collector().record_orchestration_event(
         is_concordant=is_concordant,
         is_intercepted=is_intercepted,
+        latency_ms=latency_ms
+    )
+
+
+def record_context_event(
+    is_follow_up: bool = False,
+    prior_turns_used: int = 0,
+    entities_count: int = 0,
+    contraindications_count: int = 0,
+    latency_ms: float = 0.0
+) -> None:
+    """Module-level helper to record longitudinal clinical context telemetry (Phase 6.9)."""
+    get_metrics_collector().record_context_event(
+        is_follow_up=is_follow_up,
+        prior_turns_used=prior_turns_used,
+        entities_count=entities_count,
+        contraindications_count=contraindications_count,
         latency_ms=latency_ms
     )

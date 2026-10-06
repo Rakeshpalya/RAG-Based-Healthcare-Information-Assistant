@@ -1695,9 +1695,35 @@ class RAGService:
 
         trace_id = request_id or generate_request_id()
 
+        # Phase 6.9 Longitudinal Clinical Context & Multi-Turn Interaction Memory
+        from backend.intelligence.longitudinal_context import ClinicalContextEngine
+        from backend.evaluation.observability import record_context_event
+
+        context_resolution = ClinicalContextEngine.resolve_context(
+            current_turn=question or "",
+            conversation_history=conversation_history,
+            user_id=user_id,
+        )
+        try:
+            record_context_event(
+                is_follow_up=context_resolution.is_follow_up,
+                prior_turns_used=context_resolution.prior_turn_count,
+                entities_count=len(context_resolution.cumulative_profile.entities),
+                contraindications_count=len(context_resolution.contraindication_alerts),
+                latency_ms=context_resolution.resolution_latency_ms,
+            )
+        except Exception:
+            pass
+
+        effective_query = context_resolution.effective_query
+
         # Phase 4 Medical Safety Pre-Screening: Intercept emergency, self-harm, overdose
         from backend.safety.medical_safety_guard import MedicalSafetyGuard
         allow_rag, safety_assessment, immediate_msg = MedicalSafetyGuard.pre_screen_inquiry(question)
+        if allow_rag and effective_query != question:
+            eq_allow, eq_safety, eq_msg = MedicalSafetyGuard.pre_screen_inquiry(effective_query)
+            if not eq_allow:
+                allow_rag, safety_assessment, immediate_msg = eq_allow, eq_safety, eq_msg
 
         # Phase 6.1 Clinical Intent Detection & Routing
         from backend.intelligence.intent_classifier import ClinicalIntentClassifier
@@ -1705,7 +1731,7 @@ class RAGService:
         from backend.evaluation.observability import get_metrics_collector
 
         intent_result = ClinicalIntentClassifier.classify(
-            query=question,
+            query=effective_query,
             safety_assessment=safety_assessment
         )
         try:
@@ -1721,7 +1747,7 @@ class RAGService:
         # Phase 6.2 Clinical Query Planning
         from backend.intelligence.query_planner import ClinicalQueryPlanner
         query_plan = ClinicalQueryPlanner.plan(
-            query=question or "",
+            query=effective_query or "",
             intent_result=intent_result,
             user_id=user_id
         )
@@ -1778,6 +1804,7 @@ class RAGService:
                 "disclaimer": MEDICAL_DISCLAIMER,
                 "intent": intent_result.to_dict(),
                 "query_plan": query_plan.to_dict(),
+                "dialogue_context": context_resolution.to_dict(),
                 "answer_synthesis": {
                     "intent": intent_result.intent.value,
                     "confidence": "INSUFFICIENT",
@@ -1891,6 +1918,7 @@ class RAGService:
                 "disclaimer": MEDICAL_DISCLAIMER,
                 "intent": intent_result.to_dict(),
                 "query_plan": query_plan.to_dict(),
+                "dialogue_context": context_resolution.to_dict(),
                 "decision_support": {
                     "calibrated_confidence": 0.0,
                     "uncertainty_level": "INDETERMINATE",
@@ -1973,7 +2001,7 @@ class RAGService:
         effective_tokens = int(getattr(gemini_service, "max_output_tokens", settings.GEMINI_MAX_OUTPUT_TOKENS))
 
         cache_key = cache_service.generate_cache_key(
-            normalized_query=question,
+            normalized_query=effective_query,
             user_scope=user_id,
             document_signature=doc_sig,
             model=effective_model,
@@ -1991,6 +2019,7 @@ class RAGService:
                 cached_payload["request_id"] = trace_id
                 cached_payload["intent"] = intent_result.to_dict()
                 cached_payload["query_plan"] = query_plan.to_dict()
+                cached_payload["dialogue_context"] = context_resolution.to_dict()
                 if "decision_support" not in cached_payload:
                     from backend.intelligence.clinical_decision_support import ClinicalDecisionSupportEngine
                     cached_payload["decision_support"] = ClinicalDecisionSupportEngine.evaluate(
@@ -1999,7 +2028,8 @@ class RAGService:
                         answer_text=cached_payload.get("answer", ""),
                         retrieved_sources=cached_payload.get("sources", []),
                         query_plan=query_plan,
-                        safety_assessment=safety_assessment
+                        safety_assessment=safety_assessment,
+                        cumulative_profile=context_resolution.cumulative_profile
                     ).to_dict()
                 if "answer_synthesis" not in cached_payload:
                     cached_payload["answer_synthesis"] = {
@@ -2026,6 +2056,7 @@ class RAGService:
                         safety_assessment=safety_assessment,
                         intent_result=intent_result,
                         query_plan=query_plan,
+                        dialogue_context=context_resolution.to_audit_record() if context_resolution.prior_turn_count > 0 else None,
                         user_id=user_id,
                         retrieved_sources=cached_payload.get("sources", [])
                     ).to_dict()
@@ -2068,9 +2099,10 @@ class RAGService:
                 ))
                 return cached_payload
 
-        effective_search_query, conv_context_snippet = self.resolve_followup_query(
-            question=question,
-            conversation_history=conversation_history
+        effective_search_query = effective_query
+        conv_context_snippet = (
+            f"User asked previously about: {context_resolution.cumulative_profile.entities[0].name}"
+            if context_resolution.cumulative_profile.entities else None
         )
 
         retrieval_res = self.query(
@@ -2085,9 +2117,9 @@ class RAGService:
         retrieval_timings = retrieval_res["timings"]
         thresh_val = float(similarity_threshold if similarity_threshold is not None else (query_plan.similarity_threshold if query_plan else self.default_similarity_threshold))
 
-        # Double-check original question to prevent context leak when user asks an unsupported entity
+        # Double-check focus to prevent context leak when user asks an unsupported entity
         if status == "success":
-            orig_focus = self.extract_query_clinical_focus(question)
+            orig_focus = self.extract_query_clinical_focus(effective_search_query)
             if orig_focus:
                 orig_is_relevant, orig_reason = self.verify_relevance_and_sufficiency(
                     question=orig_focus,
@@ -2152,6 +2184,7 @@ class RAGService:
                 safety_assessment=safety_assessment,
                 intent_result=intent_result,
                 query_plan=query_plan,
+                dialogue_context=context_resolution.to_audit_record() if context_resolution.prior_turn_count > 0 else None,
                 fused_evidence=None,
                 answer_synthesis=None,
                 attribution_report=None,
@@ -2173,6 +2206,7 @@ class RAGService:
                 "disclaimer": MEDICAL_DISCLAIMER,
                 "intent": intent_result.to_dict(),
                 "query_plan": query_plan.to_dict(),
+                "dialogue_context": context_resolution.to_dict(),
                 "orchestration": orch_res.to_dict(),
                 "clinical_intelligence_orchestration": orch_res.to_dict(),
                 "timings": {
@@ -2268,6 +2302,7 @@ class RAGService:
                 safety_assessment=safety_assessment,
                 intent_result=intent_result,
                 query_plan=query_plan,
+                dialogue_context=context_resolution.to_audit_record() if context_resolution.prior_turn_count > 0 else None,
                 fused_evidence=retrieval_res.get("_fused_result_obj"),
                 answer_synthesis=None,
                 attribution_report=None,
@@ -2302,6 +2337,7 @@ class RAGService:
                 "disclaimer": MEDICAL_DISCLAIMER,
                 "intent": intent_result.to_dict(),
                 "query_plan": query_plan.to_dict(),
+                "dialogue_context": context_resolution.to_dict(),
                 "fused_evidence": retrieval_res.get("fused_evidence"),
                 "orchestration": orch_res.to_dict(),
                 "clinical_intelligence_orchestration": orch_res.to_dict(),
@@ -2562,7 +2598,8 @@ class RAGService:
             attribution_report=attribution_report,
             query=question,
             intent=intent_result.intent.value,
-            safety_assessment=safety_assessment
+            safety_assessment=safety_assessment,
+            cumulative_profile=context_resolution.cumulative_profile
         )
 
         try:
@@ -2592,7 +2629,8 @@ class RAGService:
             attribution_report=attribution_report,
             verification_result=verification_result,
             query_plan=query_plan,
-            safety_assessment=safety_assessment
+            safety_assessment=safety_assessment,
+            cumulative_profile=context_resolution.cumulative_profile
         )
 
         try:
@@ -2874,6 +2912,7 @@ class RAGService:
             safety_assessment=safety_assessment,
             intent_result=intent_result,
             query_plan=query_plan,
+            dialogue_context=context_resolution.to_audit_record() if context_resolution.prior_turn_count > 0 else None,
             fused_evidence=fused_obj,
             answer_synthesis=synthesis_res,
             attribution_report=attribution_report,
@@ -2904,6 +2943,7 @@ class RAGService:
             "disclaimer": gen_res.get("disclaimer", MEDICAL_DISCLAIMER),
             "intent": intent_result.to_dict(),
             "query_plan": query_plan.to_dict(),
+            "dialogue_context": context_resolution.to_dict(),
             "fused_evidence": retrieval_res.get("fused_evidence"),
             "answer_synthesis": synthesis_res.to_dict(),
             "citation_attribution": attribution_report.to_dict(),
@@ -3014,8 +3054,34 @@ class RAGService:
             "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat()
         })
 
+        # Phase 6.9 Longitudinal Clinical Context & Multi-Turn Interaction Memory
+        from backend.intelligence.longitudinal_context import ClinicalContextEngine
+        from backend.evaluation.observability import record_context_event
+
+        context_resolution = ClinicalContextEngine.resolve_context(
+            current_turn=question or "",
+            conversation_history=conversation_history,
+            user_id=user_id,
+        )
+        try:
+            record_context_event(
+                is_follow_up=context_resolution.is_follow_up,
+                prior_turns_used=context_resolution.prior_turn_count,
+                entities_count=len(context_resolution.cumulative_profile.entities),
+                contraindications_count=len(context_resolution.contraindication_alerts),
+                latency_ms=context_resolution.resolution_latency_ms,
+            )
+        except Exception:
+            pass
+
+        effective_query = context_resolution.effective_query
+
         # 2. Medical Safety Pre-Screening: Intercept emergency, self-harm, overdose
         allow_rag, safety_assessment, immediate_msg = MedicalSafetyGuard.pre_screen_inquiry(question)
+        if allow_rag and effective_query != question:
+            eq_allow, eq_safety, eq_msg = MedicalSafetyGuard.pre_screen_inquiry(effective_query)
+            if not eq_allow:
+                allow_rag, safety_assessment, immediate_msg = eq_allow, eq_safety, eq_msg
 
         # Phase 6.1 Clinical Intent Detection & Routing
         from backend.intelligence.intent_classifier import ClinicalIntentClassifier
@@ -3023,7 +3089,7 @@ class RAGService:
         from backend.evaluation.observability import get_metrics_collector
 
         intent_result = ClinicalIntentClassifier.classify(
-            query=question,
+            query=effective_query,
             safety_assessment=safety_assessment
         )
         try:
@@ -3039,7 +3105,7 @@ class RAGService:
         # Phase 6.2 Clinical Query Planning
         from backend.intelligence.query_planner import ClinicalQueryPlanner
         query_plan = ClinicalQueryPlanner.plan(
-            query=question or "",
+            query=effective_query or "",
             intent_result=intent_result,
             user_id=user_id
         )
@@ -3082,6 +3148,7 @@ class RAGService:
                 "disclaimer": MEDICAL_DISCLAIMER,
                 "intent": intent_result.to_dict(),
                 "query_plan": query_plan.to_dict(),
+                "dialogue_context": context_resolution.to_dict(),
                 "answer_synthesis": fallback_synth.to_dict(),
                 "timings": {
                     "total_time_ms": elapsed_ms,
@@ -3113,6 +3180,11 @@ class RAGService:
             "query_plan": query_plan.to_dict()
         })
 
+        if context_resolution.prior_turn_count > 0:
+            yield ("dialogue_context", {
+                "dialogue_context": context_resolution.to_dict()
+            })
+
         # Phase 6.2 Out-of-Scope Pre-Retrieval Intercept
         if allow_rag and not query_plan.retrieval_required:
             elapsed_ms = round((time.perf_counter() - start_time) * 1000.0, 2)
@@ -3141,6 +3213,7 @@ class RAGService:
                 "disclaimer": MEDICAL_DISCLAIMER,
                 "intent": intent_result.to_dict(),
                 "query_plan": query_plan.to_dict(),
+                "dialogue_context": context_resolution.to_dict(),
                 "answer_synthesis": fallback_synth.to_dict(),
                 "timings": {
                     "total_time_ms": elapsed_ms,
@@ -3161,7 +3234,7 @@ class RAGService:
         effective_tokens = int(getattr(gemini_service, "max_output_tokens", settings.GEMINI_MAX_OUTPUT_TOKENS))
 
         cache_key = cache_service.generate_cache_key(
-            normalized_query=question,
+            normalized_query=effective_query,
             user_scope=user_id,
             document_signature=doc_sig,
             model=effective_model,
@@ -3188,6 +3261,7 @@ class RAGService:
                 cached_payload["request_id"] = trace_id
                 cached_payload["intent"] = intent_result.to_dict()
                 cached_payload["query_plan"] = query_plan.to_dict()
+                cached_payload["dialogue_context"] = context_resolution.to_dict()
                 if "timings" in cached_payload and isinstance(cached_payload["timings"], dict):
                     cached_payload["timings"]["request_id"] = trace_id
                     cached_payload["timings"]["cache_hit"] = True
@@ -3205,9 +3279,10 @@ class RAGService:
             "message": "Searching healthcare knowledge base for reference evidence..."
         })
 
-        effective_search_query, conv_context_snippet = self.resolve_followup_query(
-            question=question,
-            conversation_history=conversation_history
+        effective_search_query = effective_query
+        conv_context_snippet = (
+            f"User asked previously about: {context_resolution.cumulative_profile.entities[0].name}"
+            if context_resolution.cumulative_profile.entities else None
         )
 
         retrieval_res = self.query(
@@ -3223,7 +3298,7 @@ class RAGService:
         thresh_val = float(similarity_threshold if similarity_threshold is not None else (query_plan.similarity_threshold if query_plan else self.default_similarity_threshold))
 
         if status == "success":
-            orig_focus = self.extract_query_clinical_focus(question)
+            orig_focus = self.extract_query_clinical_focus(effective_search_query)
             if orig_focus:
                 orig_is_relevant, orig_reason = self.verify_relevance_and_sufficiency(
                     question=orig_focus,
@@ -3268,6 +3343,7 @@ class RAGService:
                 safety_assessment=safety_assessment,
                 intent_result=intent_result,
                 query_plan=query_plan,
+                dialogue_context=context_resolution.to_audit_record() if context_resolution.prior_turn_count > 0 else None,
                 fused_evidence=retrieval_res.get("_fused_result_obj"),
                 answer_synthesis=fallback_synth,
                 attribution_report=None,
@@ -3296,6 +3372,7 @@ class RAGService:
                 "disclaimer": MEDICAL_DISCLAIMER,
                 "intent": intent_result.to_dict(),
                 "query_plan": query_plan.to_dict(),
+                "dialogue_context": context_resolution.to_dict(),
                 "fused_evidence": retrieval_res.get("fused_evidence"),
                 "answer_synthesis": fallback_synth.to_dict(),
                 "orchestration": stream_orch.to_dict(),
@@ -3535,7 +3612,8 @@ class RAGService:
             attribution_report=attribution_report,
             query=question,
             intent=intent_result.intent.value,
-            safety_assessment=safety_assessment
+            safety_assessment=safety_assessment,
+            cumulative_profile=context_resolution.cumulative_profile
         )
 
         try:
@@ -3565,7 +3643,8 @@ class RAGService:
             attribution_report=attribution_report,
             verification_result=verification_result,
             query_plan=query_plan,
-            safety_assessment=safety_assessment
+            safety_assessment=safety_assessment,
+            cumulative_profile=context_resolution.cumulative_profile
         )
 
         try:
@@ -3734,6 +3813,7 @@ class RAGService:
             safety_assessment=safety_assessment,
             intent_result=intent_result,
             query_plan=query_plan,
+            dialogue_context=context_resolution.to_audit_record() if context_resolution.prior_turn_count > 0 else None,
             fused_evidence=fused_obj,
             answer_synthesis=synthesis_res,
             attribution_report=attribution_report,
@@ -3771,6 +3851,7 @@ class RAGService:
             "disclaimer": MEDICAL_DISCLAIMER,
             "intent": intent_result.to_dict(),
             "query_plan": query_plan.to_dict(),
+            "dialogue_context": context_resolution.to_dict(),
             "fused_evidence": retrieval_res.get("fused_evidence"),
             "answer_synthesis": synthesis_res.to_dict(),
             "citation_attribution": attribution_report.to_dict(),

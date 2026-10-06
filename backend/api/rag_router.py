@@ -162,6 +162,7 @@ class RAGQueryResponse(BaseModel):
     intent: Optional[Dict[str, Any]] = None
     orchestration: Optional[Dict[str, Any]] = None
     clinical_intelligence_orchestration: Optional[Dict[str, Any]] = None
+    dialogue_context: Optional[Dict[str, Any]] = None
 
 
 @router.post(
@@ -225,7 +226,8 @@ async def query_rag(
             disclaimer=result.get("disclaimer", ""),
             timings=result.get("timings"),
             request_id=req_id,
-            intent=result.get("intent")
+            intent=result.get("intent"),
+            dialogue_context=result.get("dialogue_context")
         )
     except GeminiServiceError as gse:
         logger.warning("GeminiServiceError handled cleanly in rag_router: %s", str(gse))

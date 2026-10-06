@@ -14,6 +14,7 @@ from datetime import datetime, timezone
 class PipelineStage(str, Enum):
     """Enumeration of clinical reasoning pipeline stages."""
     SAFETY_PRE_SCREEN = "SAFETY_PRE_SCREEN"
+    DIALOGUE_CONTEXT = "DIALOGUE_CONTEXT"
     INTENT_CLASSIFICATION = "INTENT_CLASSIFICATION"
     QUERY_PLANNING = "QUERY_PLANNING"
     EVIDENCE_FUSION = "EVIDENCE_FUSION"

@@ -40,6 +40,7 @@ class ClinicalIntelligenceOrchestrator:
         attribution_report: Optional[Any] = None,
         verification_result: Optional[Any] = None,
         decision_support: Optional[Any] = None,
+        dialogue_context: Optional[Any] = None,
         user_id: Optional[int] = None,
         tenant_id: Optional[str] = None,
         retrieved_sources: Optional[List[Dict[str, Any]]] = None,
@@ -105,6 +106,34 @@ class ClinicalIntelligenceOrchestrator:
         )
         stages.append(pre_screen_record)
         stage_status_map[PipelineStage.SAFETY_PRE_SCREEN.value] = pre_screen_status.value
+
+        # ----------------------------------------------------------------------
+        # 1.5 Audit Stage 0.5: Longitudinal Clinical Context (Phase 6.9)
+        # ----------------------------------------------------------------------
+        if dialogue_context is not None:
+            turn_cnt = getattr(dialogue_context, "turn_count", 0)
+            is_fu = getattr(dialogue_context, "is_follow_up", False)
+            res_topic = getattr(dialogue_context, "resolved_topic", None)
+            ent_cnt = getattr(dialogue_context, "entities_count", 0)
+            prof_hash = getattr(dialogue_context, "profile_hash", "")
+            d_lat = getattr(dialogue_context, "resolution_latency_ms", 0.0)
+
+            d_status = StageExecutionStatus.SUCCESS if turn_cnt > 0 else StageExecutionStatus.SKIPPED
+            d_record = StageAuditRecord(
+                stage=PipelineStage.DIALOGUE_CONTEXT,
+                status=d_status,
+                execution_latency_ms=d_lat,
+                summary=f"Dialogue context: {turn_cnt} prior turns, is_follow_up={is_fu}, entities={ent_cnt}",
+                flags={
+                    "turn_count": turn_cnt,
+                    "is_follow_up": is_fu,
+                    "resolved_topic": res_topic,
+                    "entities_count": ent_cnt,
+                    "profile_hash": prof_hash
+                }
+            )
+            stages.append(d_record)
+            stage_status_map[PipelineStage.DIALOGUE_CONTEXT.value] = d_record.status.value
 
         # ----------------------------------------------------------------------
         # 2. Audit Stage 1: Clinical Intent Classification (Phase 6.1)
@@ -371,7 +400,10 @@ class ClinicalIntelligenceOrchestrator:
         # ----------------------------------------------------------------------
         # 11. Deterministic Cryptographic Audit Checksum
         # ----------------------------------------------------------------------
+        d_hash = getattr(dialogue_context, "profile_hash", "") if dialogue_context else ""
         raw_token = f"{trace_id}:{cat_str}:{risk_tier_str}:{uncertainty_str}:{is_emergency}:{is_self_harm}:{is_poisoning}:{citations_ok}:{grounding_ok}:{len(chunk_ids)}:{cross_tenant_ok}"
+        if d_hash:
+            raw_token += f":{d_hash}"
         audit_checksum = hashlib.sha256(raw_token.encode("utf-8")).hexdigest()
 
         # Concordance evaluation:

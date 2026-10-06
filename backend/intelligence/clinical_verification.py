@@ -470,7 +470,8 @@ class ClinicalVerificationEngine:
         attribution_report: Optional[CitationAttributionReport] = None,
         query: Optional[str] = None,
         intent: Optional[str] = None,
-        safety_assessment: Optional[Any] = None
+        safety_assessment: Optional[Any] = None,
+        cumulative_profile: Optional[Any] = None
     ) -> ClinicalVerificationResult:
         """
         Main Phase 6.6 verification entrypoint.
@@ -721,6 +722,53 @@ class ClinicalVerificationEngine:
                 entities=entities
             ))
 
+        # 4.5. Check Cumulative Profile Multi-Turn Contraindications (Phase 6.9)
+        if cumulative_profile:
+            active_conds = getattr(cumulative_profile, "active_conditions", [])
+            allergies = getattr(cumulative_profile, "confirmed_allergies", [])
+            conds_lower = {str(c).lower() for c in active_conds}
+            allergies_lower = {str(a).lower() for a in allergies}
+            ans_lower = sanitized_ans.lower()
+
+            # A. Renal impairment (CKD / AKI) vs NSAIDs
+            renal_keys = {"chronic kidney disease", "ckd", "renal failure", "renal impairment", "acute kidney injury", "aki"}
+            if bool(conds_lower & renal_keys):
+                nsaid_terms = ["ibuprofen", "naproxen", "celecoxib", "diclofenac", "indomethacin", "ketorolac", "meloxicam"]
+                found_nsaids = [n for n in nsaid_terms if re.search(rf'\b{re.escape(n)}\b', ans_lower)]
+                if found_nsaids and not any(p in ans_lower for p in ["contraindicated", "avoid", "caution", "not recommended", "renal risk", "kidney risk"]):
+                    contradictions_count += 1
+                    verification_claims.append(ClinicalVerificationClaim(
+                        claim_id=f"cumul_contra_{len(verification_claims)+1}",
+                        claim_text=f"Recommends {', '.join(found_nsaids)} despite patient having chronic kidney disease/renal impairment.",
+                        raw_sentence=f"Cross-turn contraindication: {', '.join(found_nsaids)} in renal disease",
+                        verification_status=GroundingVerificationStatus.DIRECTIONAL_CONTRADICTION,
+                        hallucination_type=ClinicalHallucinationType.NEGATION_CONFLICT,
+                        is_grounded=False,
+                        confidence_score=0.0,
+                        discrepancy_details=[f"Cross-Turn Renal Contraindication: NSAIDs ({', '.join(found_nsaids)}) contraindicated in patient with renal impairment."],
+                        supporting_sources=[],
+                        entities=ExtractedClinicalEntities(medications=found_nsaids)
+                    ))
+
+            # B. Penicillin allergy vs Beta-lactam antibiotics
+            if "penicillin" in allergies_lower or "amoxicillin" in allergies_lower:
+                pen_terms = ["penicillin", "amoxicillin", "ampicillin", "augmentin"]
+                found_pen = [p for p in pen_terms if re.search(rf'\b{re.escape(p)}\b', ans_lower)]
+                if found_pen and not any(p in ans_lower for p in ["allergic", "allergy", "contraindicated", "avoid", "do not take"]):
+                    contradictions_count += 1
+                    verification_claims.append(ClinicalVerificationClaim(
+                        claim_id=f"cumul_allergy_{len(verification_claims)+1}",
+                        claim_text=f"Recommends {', '.join(found_pen)} despite confirmed penicillin allergy.",
+                        raw_sentence=f"Cross-turn allergy contraindication: {', '.join(found_pen)} in penicillin allergy",
+                        verification_status=GroundingVerificationStatus.DIRECTIONAL_CONTRADICTION,
+                        hallucination_type=ClinicalHallucinationType.NEGATION_CONFLICT,
+                        is_grounded=False,
+                        confidence_score=0.0,
+                        discrepancy_details=[f"Cross-Turn Allergy Contraindication: Penicillin-class antibiotics ({', '.join(found_pen)}) contraindicated in penicillin-allergic patient."],
+                        supporting_sources=[],
+                        entities=ExtractedClinicalEntities(medications=found_pen)
+                    ))
+
         # 5. Calculate Metrics
         total_claims = len(verification_claims)
         factual_claims = [c for c in verification_claims if c.verification_status != GroundingVerificationStatus.EXEMPT_STRUCTURAL]
@@ -740,6 +788,12 @@ class ClinicalVerificationEngine:
             answer_text=sanitized_ans,
             verification_claims=verification_claims
         )
+
+        contra_claims = [c for c in verification_claims if c.claim_id.startswith("cumul_contra") or c.claim_id.startswith("cumul_allergy")]
+        if contra_claims:
+            contra_details = [c.discrepancy_details[0] for c in contra_claims if c.discrepancy_details]
+            advisory = f"CLINICAL CAUTION & CONTRAINDICATION: {'; '.join(contra_details)}"
+            final_answer = f"{advisory}\n\n{final_answer}"
 
         if fallback_triggered:
             action_taken = SafetyPostScreenAction.TRIGGER_FALLBACK

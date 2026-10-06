@@ -123,6 +123,14 @@ __all__ = [
     "DataIsolationProvenance",
     "ClinicalIntelligenceOrchestrationResult",
     "ClinicalIntelligenceOrchestrator",
+    # Phase 6.9 Longitudinal Clinical Context & Multi-Turn Memory
+    "ClinicalEntityType",
+    "EntityTemporalState",
+    "ClinicalEntity",
+    "CumulativeClinicalProfile",
+    "DialogueStateAuditRecord",
+    "TurnContextResolution",
+    "ClinicalContextEngine",
 ]
 
 from backend.intelligence.orchestration_models import (
@@ -134,3 +142,13 @@ from backend.intelligence.orchestration_models import (
     ClinicalIntelligenceOrchestrationResult
 )
 from backend.intelligence.clinical_orchestrator import ClinicalIntelligenceOrchestrator
+
+from backend.intelligence.context_models import (
+    ClinicalEntityType,
+    EntityTemporalState,
+    ClinicalEntity,
+    CumulativeClinicalProfile,
+    DialogueStateAuditRecord,
+    TurnContextResolution
+)
+from backend.intelligence.longitudinal_context import ClinicalContextEngine
