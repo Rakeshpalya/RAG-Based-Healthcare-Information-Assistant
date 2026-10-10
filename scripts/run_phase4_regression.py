@@ -234,6 +234,11 @@ def run_benchmark() -> Dict[str, Any]:
             "groundedness_score": round(groundedness, 4),
             "contradictions_detected": contradictions_detected,
         },
+        "grounding_metrics": {
+            "claim_support_rate_pct": round(claim_support_rate, 2),
+            "groundedness_score": round(groundedness, 4),
+            "contradictions_detected": contradictions_detected,
+        },
         "latency_metrics": {
             "p50_ms": round(p50_lat, 2),
             "p95_ms": round(p95_lat, 2),
