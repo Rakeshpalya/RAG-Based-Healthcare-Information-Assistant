@@ -121,7 +121,9 @@ jobs:
 
       - name: 12. Validate Docker Compose Configuration
         run: |
+          cp .env.example .env
           docker compose config
+          rm -f .env
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -157,7 +159,13 @@ jobs:
             ai-healthcare-agent:latest
 
           echo "Waiting for container startup..."
-          sleep 5
+          for i in $(seq 1 30); do
+            if curl -s -f http://localhost:8000/health/live > /dev/null 2>&1; then
+              echo "Container is responsive after ${i}s"
+              break
+            fi
+            sleep 1
+          done
 
           echo "Querying GET /health/live..."
           curl -f http://localhost:8000/health/live
