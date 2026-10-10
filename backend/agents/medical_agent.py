@@ -14,10 +14,18 @@ import logging
 from pathlib import Path
 from typing import Optional, Dict, Any, List
 
-from agno.agent import Agent
-from agno.db.sqlite import SqliteDb
-from agno.models.openai import OpenAIChat
-from agno.models.google import Gemini
+try:
+    from agno.agent import Agent
+    from agno.db.sqlite import SqliteDb
+    from agno.models.openai import OpenAIChat
+    from agno.models.google import Gemini
+    AGNO_AVAILABLE = True
+except ImportError:
+    Agent = Any  # type: ignore
+    SqliteDb = Any  # type: ignore
+    OpenAIChat = Any  # type: ignore
+    Gemini = Any  # type: ignore
+    AGNO_AVAILABLE = False
 
 from backend.config import Settings
 
@@ -64,6 +72,8 @@ def _ensure_db_dir() -> str:
 def _get_shared_db() -> SqliteDb:
     """Returns a singleton SqliteDb instance to avoid recreating database connections."""
     global _CACHED_DB
+    if not AGNO_AVAILABLE:
+        raise RuntimeError("Agno framework is not installed. Please install 'agno' to use HealthAI Medical Assistant Agent.")
     if _CACHED_DB is None:
         db_file_path = _ensure_db_dir()
         _CACHED_DB = SqliteDb(db_file=db_file_path)
@@ -89,6 +99,8 @@ def get_medical_agent(
     Returns:
         Configured Agno Agent instance.
     """
+    if not AGNO_AVAILABLE:
+        raise RuntimeError("Agno framework is not installed. Please install 'agno' to use HealthAI Medical Assistant Agent.")
     global _CACHED_OPENAI_AGENT, _CACHED_GEMINI_AGENT
     shared_db = _get_shared_db()
 
