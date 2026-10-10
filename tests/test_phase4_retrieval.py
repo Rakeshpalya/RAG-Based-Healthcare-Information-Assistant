@@ -113,13 +113,24 @@ def test_04_benchmark_retrieval_recall_and_ranking():
 
 def test_05_retrieval_sufficiency_gate_discrimination():
     """Verify sufficiency gate distinguishes between grounded queries and off-topic unsupported queries."""
+    from unittest.mock import MagicMock
     vs = get_vector_store_service()
     rag = RAGService(vector_store=vs)
+
+    mock_gemini = MagicMock()
+    mock_gemini.generate_answer.return_value = {
+        "answer": "CT scan findings of the lungs showed clear lung fields without consolidation [Source 1].",
+        "model": "mock-gemini-test",
+        "elapsed_ms": 10.0,
+        "input_tokens": 50,
+        "output_tokens": 20
+    }
 
     # Supported medical query -> sufficient context
     med_res = rag.generate_rag_answer(
         question="What were the CT scan findings of the lungs?",
-        similarity_threshold=0.25
+        similarity_threshold=0.25,
+        gemini_service=mock_gemini
     )
     assert med_res["retrieval_status"] == "success"
     assert len(med_res["sources"]) > 0
@@ -127,7 +138,8 @@ def test_05_retrieval_sufficiency_gate_discrimination():
     # Unsupported off-topic query -> insufficient context (sufficiency gate triggers)
     unsup_res = rag.generate_rag_answer(
         question="What is the subspace warp drive formula in quantum astrophysics?",
-        similarity_threshold=0.85
+        similarity_threshold=0.85,
+        gemini_service=mock_gemini
     )
     assert unsup_res["retrieval_status"] == "no_relevant_context"
     assert "Relevant medical information could not be found" in unsup_res["answer"]

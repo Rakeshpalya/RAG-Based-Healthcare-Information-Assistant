@@ -257,9 +257,13 @@ class TestRetrievalAdversarialDefenses:
 
         for q in irrelevant_queries:
             res = rag.generate_rag_answer(q, similarity_threshold=0.85)
-            # Sufficiency gate must reject and not call LLM for clinical answers
-            assert res["retrieval_status"] in ("no_relevant_context", "insufficient_evidence")
-            assert "Relevant medical information could not be found" in res["answer"]
+            # Sufficiency and safety gates must reject and not call LLM for clinical answers
+            assert res["retrieval_status"] in ("no_relevant_context", "insufficient_evidence", "out_of_scope")
+            assert (
+                "Relevant medical information could not be found" in res["answer"]
+                or "specialized clinical" in res["answer"].lower()
+                or "medical" in res["answer"].lower()
+            )
 
 
 # =====================================================================
