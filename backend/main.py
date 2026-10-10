@@ -142,17 +142,22 @@ async def security_and_size_middleware(request: Request, call_next):
     return response
 
 
-# Enable CORS for local frontend development and production origins
+# Enable CORS for local frontend development and production origins (Phase 7 Netlify support)
+allowed_origins_env = os.getenv("ALLOWED_ORIGINS", "")
+custom_origins = [o.strip() for o in allowed_origins_env.split(",") if o.strip()]
+default_origins = [
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+    "http://localhost:8501",
+]
+cors_origins = list(dict.fromkeys(default_origins + custom_origins))
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:5173",
-        "http://127.0.0.1:5173",
-        "http://localhost:3000",
-        "http://127.0.0.1:3000",
-        "http://localhost:8501",
-        "*"
-    ],
+    allow_origins=cors_origins,
+    allow_origin_regex=r"^https://.*\.netlify\.app$",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -169,9 +174,11 @@ app.include_router(query_router)
 
 # Mount production React frontend static bundle if dist directory exists
 dist_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "dist")
-if os.path.exists(dist_dir):
+frontend_react_dist = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "frontend-react", "dist")
+target_dist = frontend_react_dist if os.path.exists(frontend_react_dist) else (dist_dir if os.path.exists(dist_dir) else None)
+if target_dist:
     from fastapi.staticfiles import StaticFiles
-    app.mount("/app", StaticFiles(directory=dist_dir, html=True), name="frontend")
+    app.mount("/app", StaticFiles(directory=target_dist, html=True), name="frontend")
 
 
 @app.get("/", summary="Root Endpoint", tags=["System"])

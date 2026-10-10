@@ -191,6 +191,7 @@ class TurnContextResolution(BaseModel):
         )
 
     def to_dict(self) -> Dict[str, Any]:
+        alerts_list = [a.to_dict() for a in self.contraindication_alerts]
         return {
             "original_query": self.original_query,
             "effective_query": self.effective_query,
@@ -199,7 +200,11 @@ class TurnContextResolution(BaseModel):
             "prior_turn_count": self.prior_turn_count,
             "cumulative_profile": self.cumulative_profile.to_dict(),
             "inherited_contraindications": list(self.inherited_contraindications),
-            "contraindication_alerts": [a.to_dict() for a in self.contraindication_alerts],
+            "contraindication_alerts": alerts_list,
+            "contraindications": alerts_list,
+            "contraindications_detected": len(alerts_list),
+            "entities_count": self.cumulative_profile.total_entities_extracted,
+            "profile_hash": self.cumulative_profile.profile_hash,
             "resolution_confidence": round(self.resolution_confidence, 3),
             "latency_ms": round(self.latency_ms, 3)
         }
