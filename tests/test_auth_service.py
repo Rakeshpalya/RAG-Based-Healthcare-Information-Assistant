@@ -212,6 +212,42 @@ def test_auth_payload_dict_compatibility():
     print("[PASS] test_auth_payload_dict_compatibility passed.")
 
 
+def test_lazy_initialization_defers_credential_validation():
+    """Verify AuthService(lazy=True) does not raise on init when unconfigured, but raises when client is accessed."""
+    with patch("backend.services.auth_service.settings.SUPABASE_URL", None), \
+         patch("backend.services.auth_service.settings.SUPABASE_PUBLISHABLE_KEY", None):
+        service = AuthService(lazy=True)
+        assert service.is_configured is False
+        assert service._client is None
+
+        with pytest.raises(ValueError) as exc_info:
+            _ = service.client
+        assert "SUPABASE_URL is not configured" in str(exc_info.value)
+    print("[PASS] test_lazy_initialization_defers_credential_validation passed.")
+
+
+def test_lazy_initialization_on_demand_connection():
+    """Verify AuthService(lazy=True) initializes client upon first client property access when credentials are provided."""
+    with patch("backend.services.auth_service.create_client") as mock_create_client:
+        mock_client = MagicMock()
+        mock_create_client.return_value = mock_client
+
+        service = AuthService(
+            supabase_url="https://lazy.supabase.co",
+            supabase_key="lazy-key",
+            lazy=True,
+        )
+        assert service._client is None
+        mock_create_client.assert_not_called()
+
+        # Access client property on demand
+        client = service.client
+        assert client == mock_client
+        mock_create_client.assert_called_once_with("https://lazy.supabase.co", "lazy-key")
+        assert service.is_configured is True
+    print("[PASS] test_lazy_initialization_on_demand_connection passed.")
+
+
 if __name__ == "__main__":
     print("Running Supabase AuthService unit tests...")
     test_missing_supabase_url_raises_value_error()
@@ -224,4 +260,6 @@ if __name__ == "__main__":
     test_get_current_user_with_jwt()
     test_get_current_user_returns_none_when_unauthenticated()
     test_auth_payload_dict_compatibility()
+    test_lazy_initialization_defers_credential_validation()
+    test_lazy_initialization_on_demand_connection()
     print("All Supabase AuthService unit tests passed successfully!")

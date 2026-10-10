@@ -505,6 +505,7 @@ class Settings:
             "redis_port": cls.REDIS_PORT,
             "redis_db": cls.REDIS_DB,
             "redis_password_configured": bool(cls.REDIS_PASSWORD),
+            "supabase_configured": bool(os.environ.get("SUPABASE_URL", cls.SUPABASE_URL or "") and os.environ.get("SUPABASE_PUBLISHABLE_KEY", cls.SUPABASE_PUBLISHABLE_KEY or "")),
             "debug": cls.DEBUG,
         }
 
@@ -524,6 +525,8 @@ class Settings:
         cls.REDIS_PORT = int(os.getenv("REDIS_PORT", "6379"))
         cls.REDIS_DB = int(os.getenv("REDIS_DB", "0"))
         cls.REDIS_PASSWORD = os.getenv("REDIS_PASSWORD", None)
+        cls.SUPABASE_URL = normalize_supabase_url(os.getenv("SUPABASE_URL"))
+        cls.SUPABASE_PUBLISHABLE_KEY = os.getenv("SUPABASE_PUBLISHABLE_KEY")
 
     # ========================================================
     # Production Configuration Validation (Phase 9)
@@ -569,6 +572,14 @@ class Settings:
             db_url = os.environ.get("DATABASE_URL", cls.DATABASE_URL or "")
             if not db_url or not db_url.strip():
                 errors.append("MISSING_CONFIGURATION: DATABASE_URL is required in production.")
+
+            supabase_url = os.environ.get("SUPABASE_URL", cls.SUPABASE_URL or "")
+            if not supabase_url or not str(supabase_url).strip():
+                warnings.append("MISSING_CONFIGURATION: SUPABASE_URL is not set for Supabase authentication.")
+
+            supabase_key = os.environ.get("SUPABASE_PUBLISHABLE_KEY", cls.SUPABASE_PUBLISHABLE_KEY or "")
+            if not supabase_key or not str(supabase_key).strip():
+                warnings.append("MISSING_CONFIGURATION: SUPABASE_PUBLISHABLE_KEY is not set for Supabase authentication.")
 
         return {
             "valid": len(errors) == 0,

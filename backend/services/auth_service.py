@@ -28,6 +28,7 @@ class AuthService:
         supabase_url: Optional[str] = None,
         supabase_key: Optional[str] = None,
         client: Optional[Client] = None,
+        lazy: bool = False,
     ) -> None:
         """
         Initialize AuthService.
@@ -36,18 +37,37 @@ class AuthService:
             supabase_url: Optional Supabase URL override. Defaults to settings.SUPABASE_URL.
             supabase_key: Optional Supabase publishable key override. Defaults to settings.SUPABASE_PUBLISHABLE_KEY.
             client: Optional pre-configured Supabase Client (useful for dependency injection and testing).
+            lazy: If True, defers Supabase client creation until first access, preventing import-time crashes.
+
+        Raises:
+            ValueError: If SUPABASE_URL or SUPABASE_PUBLISHABLE_KEY is missing or empty (when not lazy).
+        """
+        if client is not None:
+            self._client: Optional[Client] = client
+            self.supabase_url: str = str(supabase_url) if supabase_url else ""
+            self.supabase_key: str = str(supabase_key) if supabase_key else ""
+            self._lazy: bool = False
+            return
+
+        self._client: Optional[Client] = None
+        self._supabase_url: Optional[str] = supabase_url
+        self._supabase_key: Optional[str] = supabase_key
+        self.supabase_url: str = ""
+        self.supabase_key: str = ""
+        self._lazy: bool = lazy
+
+        if not lazy:
+            self._init_client()
+
+    def _init_client(self) -> None:
+        """
+        Instantiates the Supabase client using configured credentials.
 
         Raises:
             ValueError: If SUPABASE_URL or SUPABASE_PUBLISHABLE_KEY is missing or empty.
         """
-        if client is not None:
-            self.client: Client = client
-            self.supabase_url: str = str(supabase_url) if supabase_url else ""
-            self.supabase_key: str = str(supabase_key) if supabase_key else ""
-            return
-
-        url = supabase_url if supabase_url is not None else settings.SUPABASE_URL
-        key = supabase_key if supabase_key is not None else settings.SUPABASE_PUBLISHABLE_KEY
+        url = self._supabase_url if self._supabase_url is not None else settings.SUPABASE_URL
+        key = self._supabase_key if self._supabase_key is not None else settings.SUPABASE_PUBLISHABLE_KEY
 
         if not url or not str(url).strip():
             raise ValueError(
@@ -63,9 +83,30 @@ class AuthService:
 
         raw_url = str(url).strip()
         clean_url = raw_url.split("/rest/v1")[0].rstrip("/")
-        self.supabase_url: str = clean_url
-        self.supabase_key: str = str(key).strip()
-        self.client: Client = create_client(self.supabase_url, self.supabase_key)
+        self.supabase_url = clean_url
+        self.supabase_key = str(key).strip()
+        self._client = create_client(self.supabase_url, self.supabase_key)
+
+    @property
+    def client(self) -> Client:
+        """
+        Retrieves or initializes the underlying Supabase Client.
+        """
+        if self._client is None:
+            self._init_client()
+        return self._client
+
+    @client.setter
+    def client(self, value: Client) -> None:
+        """Sets the Supabase client directly (useful for testing and injection)."""
+        self._client = value
+
+    @property
+    def is_configured(self) -> bool:
+        """Check if Supabase credentials are configured without throwing an exception."""
+        url = self._supabase_url if self._supabase_url is not None else settings.SUPABASE_URL
+        key = self._supabase_key if self._supabase_key is not None else settings.SUPABASE_PUBLISHABLE_KEY
+        return bool(url and str(url).strip() and key and str(key).strip())
 
     @staticmethod
     def _extract_auth_payload(response: Any) -> Dict[str, Any]:
@@ -205,5 +246,6 @@ class AuthService:
         return getattr(response, "user", response)
 
 
-# Global default instance configured from settings
-auth_service = AuthService()
+# Global default instance configured lazily from settings so module imports
+# do not require external service credentials to be present at import time.
+auth_service = AuthService(lazy=True)

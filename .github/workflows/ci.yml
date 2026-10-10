@@ -18,6 +18,8 @@ env:
   SAFE_LOG_MODE: "true"
   REDIS_ENABLED: "false"
   GEMINI_API_KEY: "test-mock-ci-key"
+  SUPABASE_URL: "https://mock-supabase-ci-test.supabase.co"
+  SUPABASE_PUBLISHABLE_KEY: "mock-supabase-publishable-key-for-ci-testing"
 
 jobs:
   # ============================================================================
@@ -150,6 +152,8 @@ jobs:
             -e PORT=8000 \
             -e SAFE_LOG_MODE=true \
             -e DEBUG=false \
+            -e SUPABASE_URL=https://mock-supabase-ci-test.supabase.co \
+            -e SUPABASE_PUBLISHABLE_KEY=mock-supabase-publishable-key-for-ci-testing \
             ai-healthcare-agent:latest
 
           echo "Waiting for container startup..."

@@ -69,6 +69,7 @@ def validate_production_startup(root_dir: Path = None) -> Dict[str, Any]:
         "gemini_masked_key": masked_key,
         "gemini_model": settings.GEMINI_MODEL,
         "database_url_configured": bool(settings.DATABASE_URL),
+        "supabase_configured": bool(settings.SUPABASE_URL and settings.SUPABASE_PUBLISHABLE_KEY),
         "status": "PASS",
     }
 

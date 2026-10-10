@@ -25,6 +25,8 @@ env:
   REDIS_ENABLED: "false"
   GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY || 'test-mock-ci-key' }}
   ENABLE_LIVE_LLM: ${{ inputs.enable_live_llm || 'false' }}
+  SUPABASE_URL: "https://mock-supabase-ci-test.supabase.co"
+  SUPABASE_PUBLISHABLE_KEY: "mock-supabase-publishable-key-for-ci-testing"
 
 jobs:
   phase4-clinical-evaluation:
