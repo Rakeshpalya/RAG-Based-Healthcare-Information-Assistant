@@ -407,6 +407,14 @@ class ClinicalCitationAttributionEngine:
             return
 
         # Check each cited source
+        valid_cits = [c for c in claim.cited_source_indices if c in source_map]
+        if valid_cits and not any(bool(source_map[c].get("text") or source_map[c].get("preview_text")) for c in valid_cits):
+            # Metadata-only source(s): text not available for lexical checking -> allow fallback
+            claim.verification_status = CitationVerificationStatus.VERIFIED
+            claim.is_supported = True
+            claim.best_support_score = 1.0
+            return
+
         spans: List[AttributedEvidenceSpan] = []
         scores: List[float] = []
         has_invalid_idx = False

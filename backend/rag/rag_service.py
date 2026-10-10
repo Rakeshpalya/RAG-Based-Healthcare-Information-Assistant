@@ -2550,8 +2550,16 @@ class RAGService:
         claims_unsupported_total = max(validation_result.claims_unsupported, attribution_report.unsupported_claims_count)
         claims_supported_total = max(validation_result.claims_supported, attribution_report.verified_claims_count)
 
+        all_unsupported_rejection = (
+            (validation_result.claims_checked > 0 and validation_result.claims_supported == 0) or
+            (attribution_report.factual_claims_count > 0 and attribution_report.verified_claims_count == 0) or
+            (claims_supported_total == 0) or
+            (validation_result.cleaned_grounded_answer and "Relevant medical information could not be found" in validation_result.cleaned_grounded_answer) or
+            (attribution_report.cleaned_attributed_answer and "Relevant medical information could not be found" in attribution_report.cleaned_attributed_answer)
+        )
+
         if (validation_result.has_citations or attribution_report.factual_claims_count > 0) and claims_unsupported_total > 0:
-            if claims_supported_total == 0 or (not validation_result.cleaned_grounded_answer and not attribution_report.cleaned_attributed_answer):
+            if all_unsupported_rejection or (not validation_result.cleaned_grounded_answer and not attribution_report.cleaned_attributed_answer):
                 logger.warning(
                     "Citation enforcement rejected answer: %d unsupported claims found (%s). Halting generation.",
                     claims_unsupported_total,
@@ -2568,7 +2576,10 @@ class RAGService:
                     claims_unsupported_total,
                     claims_supported_total
                 )
-                cleaned_answer = attribution_report.cleaned_attributed_answer or validation_result.cleaned_grounded_answer
+                if validation_result.claims_unsupported > 0 and validation_result.cleaned_grounded_answer:
+                    cleaned_answer = validation_result.cleaned_grounded_answer
+                else:
+                    cleaned_answer = attribution_report.cleaned_attributed_answer or validation_result.cleaned_grounded_answer
 
         # Strip any hallucinated or spoofed source tags
         combined_invalid = sorted(list(set(validation_result.invalid_citations + attribution_report.invalid_citations)))

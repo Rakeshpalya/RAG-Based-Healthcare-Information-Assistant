@@ -15,7 +15,7 @@ env:
   RAG_SIMILARITY_THRESHOLD: 0.25
   RAG_LATENCY_P95_BUDGET_MS: 3500.0
   DEBUG: "false"
-  SAFE_LOG_MODE: "true"
+  SAFE_LOG_MODE: "false"
   REDIS_ENABLED: "false"
   GEMINI_API_KEY: "test-mock-ci-key"
   SUPABASE_URL: "https://mock-supabase-ci-test.supabase.co"
