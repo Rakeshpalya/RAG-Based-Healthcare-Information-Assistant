@@ -414,7 +414,12 @@ class ClinicalIntentClassifier:
         has_clinical_keywords = bool(re.search(
             r'\b(?:symptoms?|disease|condition|diagnosis|treatment|medication|dosage|dose|drug|'
             r'hypertension|diabetes|asthma|cancer|blood\s+pressure|heart|kidney|allergy|allergies|'
-            r'document|pdf|summarize|findings?|recommendations?|compare)\b',
+            r'vascular|artery|arteries|vein|veins|cardiac|pulmonary|renal|hepatic|neurological|'
+            r'respiratory|gastrointestinal|infection|fever|cough|pain|prescription|physician|doctor|'
+            r'hospital|clinic|therapy|syndrome|illness|disorder|cholesterol|insulin|glucose|hba1c|'
+            r'antibiotic|vaccine|biopsy|radiology|x-ray|mri|ct\s+scan|ecg|vital\s+signs|oxygen|'
+            r'pathology|pathophysiology|etiology|anatomy|physiology|body|organ|organs|'
+            r'document|pdf|summarize|findings?|recommendations?|compare|clinical|guidelines?|study|trial|medical)\b',
             clean_text,
             re.I
         ))
@@ -550,6 +555,8 @@ class ClinicalIntentClassifier:
         # 4.10 General Health Query
         for pattern, sig in GENERAL_HEALTH_PATTERNS:
             if pattern.search(clean_text):
+                if sig == "GH_EXPLANATION" and not has_clinical_keywords:
+                    continue  # Do not classify non-clinical general concepts as General Health RAG
                 intent_scores[ClinicalIntent.GENERAL_HEALTH] += 1.2
                 matched_signals_map[ClinicalIntent.GENERAL_HEALTH].append(sig)
 
@@ -566,36 +573,50 @@ class ClinicalIntentClassifier:
             top_intent = ClinicalIntent.DOSAGE_QUERY
             top_score = max(intent_scores[ClinicalIntent.DOSAGE_QUERY], intent_scores[ClinicalIntent.MEDICATION_QUERY])
 
-        # If highest score is 0.0, evaluate whether this is a general inquiry or uncertain
+        # If highest score is 0.0, evaluate whether this is an ordinary educational query or clinical fallback
         if top_score <= 0.0:
             elapsed_ms = (time.perf_counter() - start_time) * 1000.0
-            # If question has a medical condition word or question mark
-            has_question_word = bool(re.search(r"\b(?:what|how|why|when|where|which|can|should|is|are|does)\b", clean_text, re.I))
-            if has_question_word and len(clean_text.split()) >= 3:
-                return IntentClassificationResult(
-                    intent=ClinicalIntent.GENERAL_HEALTH,
-                    confidence=0.55,
-                    matched_signals=["QUESTION_FALLBACK"],
-                    requires_retrieval=True,
-                    requires_document_context=False,
-                    safety_priority=SafetyPriority.NORMAL,
-                    routing_strategy=ClinicalRoutingStrategy.GENERAL_HEALTH_RAG,
-                    latency_ms=elapsed_ms,
-                    recommended_top_k=5,
-                    metadata={"fallback": True}
-                )
+            if has_clinical_keywords:
+                has_question_word = bool(re.search(r"\b(?:what|how|why|when|where|which|can|should|is|are|does)\b", clean_text, re.I))
+                if has_question_word and len(clean_text.split()) >= 3:
+                    return IntentClassificationResult(
+                        intent=ClinicalIntent.GENERAL_HEALTH,
+                        confidence=0.55,
+                        matched_signals=["QUESTION_FALLBACK"],
+                        requires_retrieval=True,
+                        requires_document_context=False,
+                        safety_priority=SafetyPriority.NORMAL,
+                        routing_strategy=ClinicalRoutingStrategy.GENERAL_HEALTH_RAG,
+                        latency_ms=elapsed_ms,
+                        recommended_top_k=5,
+                        metadata={"fallback": True}
+                    )
+                else:
+                    return IntentClassificationResult(
+                        intent=ClinicalIntent.UNCERTAIN,
+                        confidence=0.30,
+                        matched_signals=["NO_SIGNALS_MATCHED"],
+                        requires_retrieval=True,
+                        requires_document_context=False,
+                        safety_priority=SafetyPriority.NONE,
+                        routing_strategy=ClinicalRoutingStrategy.STANDARD_RAG,
+                        latency_ms=elapsed_ms,
+                        recommended_top_k=5,
+                        metadata={"fallback": True}
+                    )
             else:
+                # Ordinary non-clinical, non-document question -> configured Gemini API directly
                 return IntentClassificationResult(
-                    intent=ClinicalIntent.UNCERTAIN,
-                    confidence=0.30,
-                    matched_signals=["NO_SIGNALS_MATCHED"],
-                    requires_retrieval=True,
+                    intent=ClinicalIntent.EDUCATIONAL_QUERY,
+                    confidence=0.95,
+                    matched_signals=["GENERAL_EDUCATIONAL_ROUTING"],
+                    requires_retrieval=False,
                     requires_document_context=False,
                     safety_priority=SafetyPriority.NONE,
-                    routing_strategy=ClinicalRoutingStrategy.STANDARD_RAG,
+                    routing_strategy=ClinicalRoutingStrategy.EDUCATIONAL_RESPONSE,
                     latency_ms=elapsed_ms,
-                    recommended_top_k=5,
-                    metadata={"fallback": True}
+                    recommended_top_k=0,
+                    metadata={"reason": "Ordinary general knowledge question routed to Gemini (zero document retrieval)."}
                 )
 
         # Calculate confidence based on margin and raw match strength

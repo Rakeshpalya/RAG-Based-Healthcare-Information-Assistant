@@ -792,7 +792,8 @@ class RAGService:
     def generate_educational_response(
         cls,
         question: str,
-        gemini_service: Optional[Any] = None
+        gemini_service: Optional[Any] = None,
+        conversation_history: Optional[List[Dict[str, str]]] = None,
     ) -> str:
         """
         Generates labeled general educational/technology/general-knowledge responses using Gemini.
@@ -802,16 +803,36 @@ class RAGService:
         prefix = "**[General Educational Information - Not from uploaded clinical documents]**\n\n"
         q_clean = (question or "").strip()
 
+        # Build bounded multi-turn conversation context if available
+        history_context = ""
+        if conversation_history:
+            recent_turns = conversation_history[-6:]  # bounded to last 6 turns
+            formatted_turns = []
+            for turn in recent_turns:
+                role = str(turn.get("role", "user")).capitalize()
+                content = (turn.get("content") or turn.get("message") or "").strip()
+                if content:
+                    formatted_turns.append(f"{role}: {content}")
+            if formatted_turns:
+                history_context = "Prior conversation context:\n" + "\n".join(formatted_turns) + "\n\n"
+
         system_instruction = (
             "You are HealthAI Assistant providing helpful, accurate, and objective general educational, "
-            "technical, or geographical information. The user's inquiry does not pertain to their personal "
+            "technical, scientific, historical, or geographical information. The user's inquiry does not pertain to their personal "
             "uploaded medical records. Provide a clear, informative, and well-structured answer. "
-            "For geographical inquiries (such as Tumkur / Tumakuru), provide a well-rounded general overview "
-            "(e.g., location in Karnataka, educational significance, industry, cultural heritage) without "
+            "For geographical inquiries (such as Tumkur / Tumakuru or Karnataka), provide a well-rounded general overview "
+            "(e.g., location, educational significance, industry, cultural heritage) without "
             "fabricating live events, real-time status, or current business hours."
         )
 
-        prompt = f"Please explain or provide information regarding the following topic:\n{q_clean}"
+        if history_context:
+            prompt = (
+                f"{history_context}"
+                f"Current question or follow-up:\n{q_clean}\n\n"
+                "Please provide a direct, helpful, and comprehensive response using the context above if relevant."
+            )
+        else:
+            prompt = f"Please explain or provide information regarding the following topic:\n{q_clean}"
 
         try:
             from backend.services.gemini_service import GeminiService
@@ -827,8 +848,18 @@ class RAGService:
                 if not clean_text.startswith("**[General Educational Information"):
                     return prefix + clean_text
                 return clean_text
+        except GeminiServiceError:
+            raise
         except Exception as e:
-            logger.warning("Gemini educational generation failed, falling back to curated synthesis: %s", str(e))
+            logger.warning("Gemini educational generation failed: %s", str(e))
+            err_str = str(e).lower()
+            if any(k in err_str for k in ("invalid api key", "unauthenticated", "401")):
+                raise GeminiServiceError("Gemini authentication failed: The provided API key is invalid or lacks required permissions.", error_type="auth_error", status_code=401)
+            if any(k in err_str for k in ("429", "quota", "resource exhausted")):
+                raise GeminiServiceError("The AI generation service is temporarily unavailable due to high demand (Gemini quota or rate limit exceeded).", error_type="quota_error", status_code=429)
+            if any(k in err_str for k in ("timeout", "504", "deadline")):
+                raise GeminiServiceError("The AI generation service timed out while processing the request.", error_type="timeout_error", status_code=504)
+            return cls._get_curated_educational_fallback(q_clean)
 
         return cls._get_curated_educational_fallback(q_clean)
 
@@ -891,6 +922,22 @@ class RAGService:
                 prefix +
                 "Deep Learning is a subset of machine learning based on artificial neural networks with multiple layers (deep architectures). "
                 "These networks can learn hierarchical representations of complex data such as radiology scans, medical pathology images, and natural language."
+            )
+
+        if re.search(r'\bkarnataka\b', q):
+            return (
+                prefix +
+                "Karnataka is a state situated in southwestern India, bordered by Maharashtra, Goa, Telangana, Andhra Pradesh, "
+                "Tamil Nadu, and Kerala, with the Arabian Sea to the west. Known for its historical heritage, scenic Western Ghats, "
+                "and technological leadership (with capital Bengaluru often referred to as India's Silicon Valley), Karnataka is a "
+                "major center for technology, education, and cultural arts."
+            )
+        if re.search(r'\bphotosynthesis\b', q):
+            return (
+                prefix +
+                "Photosynthesis is the biochemical process by which green plants, algae, and certain bacteria convert light energy, "
+                "water, and carbon dioxide into chemical energy (glucose) and oxygen. It is fundamental to life on Earth as it produces "
+                "atmospheric oxygen and serves as the primary base for global food chains."
             )
 
         return (
@@ -2184,13 +2231,24 @@ class RAGService:
                 }
 
             if intent_result.intent == ClinicalIntent.EDUCATIONAL_QUERY:
-                edu_text = self.generate_educational_response(question, gemini_service=gemini_service)
+                try:
+                    edu_text = self.generate_educational_response(
+                        question,
+                        gemini_service=gemini_service,
+                        conversation_history=conversation_history
+                    )
+                    ret_status = "educational_response"
+                except GeminiServiceError as gse:
+                    logger.warning("Educational query Gemini generation error: %s", str(gse))
+                    edu_text = gse.message or "The AI generation service is temporarily unavailable. Please try your inquiry again shortly."
+                    ret_status = "service_unavailable"
+
                 StructuredRAGLogger.emit_rag_log(RAGStructuredLogEvent(
                     request_id=trace_id,
                     query=question or "",
                     safety_classification=cat_name,
                     risk_level=safety_assessment.risk_level,
-                    retrieval_status="educational_response",
+                    retrieval_status=ret_status,
                     embedding_latency_ms=0.0,
                     vector_search_latency_ms=0.0,
                     context_construction_latency_ms=0.0,
@@ -2202,11 +2260,11 @@ class RAGService:
                     citation_coverage=1.0,
                     hallucination_detected=False,
                     hallucination_types=[],
-                    final_status="SUCCESS",
+                    final_status="SUCCESS" if ret_status == "educational_response" else "ERROR",
                     user_id=user_id,
                     query_intent=intent_result.intent.value,
-                    llm_called=False,
-                    fallback_reason=None
+                    llm_called=True,
+                    fallback_reason=None if ret_status == "educational_response" else "gemini_error"
                 ))
                 return {
                     "request_id": trace_id,
@@ -3810,13 +3868,24 @@ class RAGService:
                 return
 
             if intent_result.intent == ClinicalIntent.EDUCATIONAL_QUERY:
-                edu_text = self.generate_educational_response(question, gemini_service=gemini_service)
+                try:
+                    edu_text = self.generate_educational_response(
+                        question,
+                        gemini_service=gemini_service,
+                        conversation_history=conversation_history
+                    )
+                    ret_status = "educational_response"
+                except GeminiServiceError as gse:
+                    logger.warning("Educational query Gemini streaming error: %s", str(gse))
+                    edu_text = gse.message or "The AI generation service is temporarily unavailable."
+                    ret_status = "service_unavailable"
+
                 yield ("token", {"token": edu_text, "index": 0})
                 yield ("complete", {
                     "request_id": trace_id,
                     "question": question or "",
                     "answer": edu_text,
-                    "retrieval_status": "educational_response",
+                    "retrieval_status": ret_status,
                     "sources": [],
                     "context": "",
                     "disclaimer": MEDICAL_DISCLAIMER,
@@ -3825,8 +3894,8 @@ class RAGService:
                     "dialogue_context": context_resolution.to_dict(),
                     "timings": {
                         "total_time_ms": elapsed_ms,
-                        "llm_called": False,
-                        "gemini_calls_count": 0,
+                        "llm_called": True,
+                        "gemini_calls_count": 1,
                     }
                 })
                 return

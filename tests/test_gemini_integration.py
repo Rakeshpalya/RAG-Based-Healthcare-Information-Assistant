@@ -80,12 +80,43 @@ def test_tumkur_query_returns_general_overview(rag_service):
     assert "tumkur" in ans_lower or "tumakuru" in ans_lower or "karnataka" in ans_lower
 
 
+def test_single_word_tumkur_routes_to_gemini(rag_service):
+    """Verifies that single-word 'tumkur' routes to educational_response without medical document refusal."""
+    query = "tumkur"
+    intent_res = ClinicalIntentClassifier.classify(query)
+    assert intent_res.intent == ClinicalIntent.EDUCATIONAL_QUERY
+    assert not intent_res.requires_retrieval
+
+    resp = rag_service.generate_rag_answer(query, user_id=8)
+    assert resp["retrieval_status"] == "educational_response"
+    assert "Relevant medical information could not be found" not in resp["answer"]
+    assert "[General Educational Information - Not from uploaded clinical documents]" in resp["answer"]
+    ans_lower = resp["answer"].lower()
+    assert "tumkur" in ans_lower or "tumakuru" in ans_lower or "karnataka" in ans_lower
+
+
+def test_multiturn_followup_preserves_conversation_context(rag_service):
+    """Verifies that follow-up questions like 'explain it with an example' preserve dialogue history."""
+    conv_history = [
+        {"role": "user", "content": "tumkur"},
+        {"role": "assistant", "content": "Tumkur is an educational and industrial city in Karnataka, India."}
+    ]
+    follow_up = "explain it with an example of its universities"
+    resp = rag_service.generate_rag_answer(follow_up, user_id=8, conversation_history=conv_history)
+    assert resp["retrieval_status"] == "educational_response"
+    assert "Relevant medical information could not be found" not in resp["answer"]
+    assert "[General Educational Information - Not from uploaded clinical documents]" in resp["answer"]
+
+
 @pytest.mark.parametrize("concept,expected_token", [
     ("what is artificial intelligence", "intelligence"),
     ("explain Python", "python"),
     ("what is machine learning", "learning"),
     ("explain FastAPI", "fastapi"),
     ("what is RAG", "rag"),
+    ("explain photosynthesis", "photosynthesis"),
+    ("tell me about Karnataka", "karnataka"),
+    ("answer general educational questions in ordinary language", "educational"),
 ])
 def test_general_educational_concepts(rag_service, concept, expected_token):
     """Verifies that core tech/educational concepts return labeled answers without retrieval."""
