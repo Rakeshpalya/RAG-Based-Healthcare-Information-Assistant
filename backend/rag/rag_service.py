@@ -835,7 +835,7 @@ class RAGService:
             prompt = f"Please explain or provide information regarding the following topic:\n{q_clean}"
 
         try:
-            from backend.services.gemini_service import GeminiService
+            from backend.services.gemini_service import GeminiService, GeminiServiceError
             service = gemini_service or GeminiService()
             result_text = service.generate(
                 prompt=prompt,
@@ -848,7 +848,13 @@ class RAGService:
                 if not clean_text.startswith("**[General Educational Information"):
                     return prefix + clean_text
                 return clean_text
-        except GeminiServiceError:
+        except GeminiServiceError as gse:
+            if not getattr(service, "api_key", None) or "missing" in str(gse).lower() or getattr(gse, "error_type", None) == "missing_key":
+                return cls._get_curated_educational_fallback(q_clean)
+            raise
+        except ValueError as ve:
+            if "key" in str(ve).lower():
+                return cls._get_curated_educational_fallback(q_clean)
             raise
         except Exception as e:
             logger.warning("Gemini educational generation failed: %s", str(e))
