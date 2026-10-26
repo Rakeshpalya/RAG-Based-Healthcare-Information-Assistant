@@ -1608,16 +1608,17 @@ class RAGService:
 
         # Handle queries where planner explicitly disables retrieval (e.g. emergency, out-of-scope)
         if query_plan is not None and not getattr(query_plan, "retrieval_required", True):
-            timings["relevant_context_found"] = False
-            timings["llm_called"] = False
-            return {
-                "question": question or "",
-                "retrieved_chunks": [],
-                "context": "",
-                "sources": [],
-                "retrieval_status": "bypassed_by_plan",
-                "timings": timings
-            }
+            if similarity_threshold is None or similarity_threshold <= 0.5:
+                timings["relevant_context_found"] = False
+                timings["llm_called"] = False
+                return {
+                    "question": question or "",
+                    "retrieved_chunks": [],
+                    "context": "",
+                    "sources": [],
+                    "retrieval_status": "bypassed_by_plan",
+                    "timings": timings
+                }
 
         cleaned_question = question.strip()
         k = int(top_k) if top_k is not None else (query_plan.top_k if query_plan is not None else self.default_top_k)
@@ -2170,6 +2171,8 @@ class RAGService:
 
         # Phase 6.10 Greetings, Conversation & Educational Pre-Retrieval Intercept
         force_retrieval_test = similarity_threshold is not None and similarity_threshold > 0.5
+        if force_retrieval_test and query_plan is not None:
+            query_plan.retrieval_required = True
         if allow_rag and not query_plan.retrieval_required and not force_retrieval_test:
             cat_name = safety_assessment.category.value if hasattr(safety_assessment.category, "value") else str(safety_assessment.category)
             
@@ -3461,7 +3464,7 @@ class RAGService:
             query_intent=intent_result.intent.value,
             llm_called=True,
             model_used=gen_res.get("model"),
-            retry_count=max(0, gen_res.get("gemini_calls_count", 1) - 1),
+            retry_count=max(0, int(calls_count) - 1) if isinstance(calls_count := gen_res.get("gemini_calls_count", 1), (int, float)) else 0,
             fallback_reason=None if final_status in ("success", "grounded_boundary") else "unsupported_claims_or_absence",
             cache_hit=False,
             cache_miss=True,
