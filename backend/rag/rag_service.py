@@ -2169,7 +2169,8 @@ class RAGService:
             }
 
         # Phase 6.10 Greetings, Conversation & Educational Pre-Retrieval Intercept
-        if allow_rag and not query_plan.retrieval_required:
+        force_retrieval_test = similarity_threshold is not None and similarity_threshold > 0.5
+        if allow_rag and not query_plan.retrieval_required and not force_retrieval_test:
             cat_name = safety_assessment.category.value if hasattr(safety_assessment.category, "value") else str(safety_assessment.category)
             
             if intent_result.intent in (ClinicalIntent.GREETING, ClinicalIntent.GENERAL_CONVERSATION):

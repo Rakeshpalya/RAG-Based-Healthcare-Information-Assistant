@@ -82,7 +82,7 @@ LAB_RESULT_PATTERNS: List[Tuple[re.Pattern, str]] = [
 # Document Summary Patterns
 DOCUMENT_SUMMARY_PATTERNS: List[Tuple[re.Pattern, str]] = [
     (re.compile(r"\b(?:summarize|give\s+me\s+a\s+summary|summary\s+of|clinical\s+summary|executive\s+summary|document\s+summary)\b", re.I), "DOC_SUMMARY_VERB"),
-    (re.compile(r"\b(?:this\s+report|this\s+document|the\s+attached|uploaded\s+document|the\s+paper|the\s+study|the\s+records?|uploaded\s+documents?)\b", re.I), "DOC_REFERENCE"),
+    (re.compile(r"\b(?:this\s+report|this\s+document|the\s+attached|uploaded\s+documents?|the\s+paper|the\s+study|(?:the|my|patient|clinical)\s+records?|(?:in|from)\s+(?:my|the)\s+records?|uploaded\s+files?)\b", re.I), "DOC_REFERENCE"),
     (re.compile(r"\b(?:key\s+findings|main\s+conclusions|overview\s+of\s+(?:this|the|uploaded)?\s*(?:document|report|file|records?|paper)?|tl;?dr\s+of|key\s+points?|main\s+points?)\b", re.I), "DOC_KEY_FINDINGS"),
     (re.compile(r"\bwhat\s+is\s+(?:this|the)\s+[\w\s]{0,25}?(?:document|report|file|record|paper)\s+about\b", re.I), "DOC_ABOUT"),
     (re.compile(r"\bwhat\s+does\s+(?:this|the|uploaded)?\s*[\w\s]{0,25}?(?:document|report|file|guide|paper)\s+(?:say|discuss|contain|cover|describe|include|address)\b", re.I), "DOC_DISCUSS"),
@@ -140,6 +140,8 @@ GENERAL_HEALTH_PATTERNS: List[Tuple[re.Pattern, str]] = [
     (re.compile(r"\b(?:what\s+is|what\s+are|explain|overview\s+of|definition\s+of)\s+(?:the\s+)?(?!ai\b|python\b|fastapi\b|machine\s+learning\b|rag\b|code\b|docker\b|sql\b)[\w\s]{2,30}\b", re.I), "GH_EXPLANATION"),
     (re.compile(r"\b(?:how\s+does\s+the\s+[\w\s]{2,20}\s+work)\b", re.I), "GH_HOW_BODY_WORKS"),
     (re.compile(r"\b(?:anatomy\s+of|physiology\s+of|role\s+of\s+[\w\s]{2,20}\s+in\s+the\s+body)\b", re.I), "GH_ANATOMY"),
+    (re.compile(r"\b(?:diet|nutrition|dietary\s+plan|dietary\s+recommendations?|what\s+should\s+i\s+eat)\b", re.I), "GH_DIET"),
+    (re.compile(r"\b(?:recommended|recommendations?)\s+in\s+(?:my|the|patient)?\s*records?\b", re.I), "GH_RECORDS_RECOMMENDATIONS"),
 ]
 
 # Explicit Non-Medical Out-of-Scope Patterns
@@ -419,7 +421,8 @@ class ClinicalIntentClassifier:
             r'hospital|clinic|therapy|syndrome|illness|disorder|cholesterol|insulin|glucose|hba1c|'
             r'antibiotic|vaccine|biopsy|radiology|x-ray|mri|ct\s+scan|ecg|vital\s+signs|oxygen|'
             r'pathology|pathophysiology|etiology|anatomy|physiology|body|organ|organs|'
-            r'document|pdf|summarize|findings?|recommendations?|compare|clinical|guidelines?|study|trial|medical)\b',
+            r'diet(?:ary)?|nutrition(?:al)?|lifestyle|records?|'
+            r'document|pdf|summarize|findings?|recommendations?|recommended|compare|clinical|guidelines?|study|trial|medical)\b',
             clean_text,
             re.I
         ))
