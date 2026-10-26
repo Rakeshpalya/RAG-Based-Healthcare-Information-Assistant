@@ -2913,13 +2913,13 @@ class RAGService:
             if accessible_docs:
                 doc_list_str = ", ".join(accessible_docs)
                 fallback_no_context = (
-                    f"The reference documents in your account ({doc_list_str}) do not contain clinical evidence "
-                    f"or recommendations regarding '{target_subject}'. To receive an evidence-grounded answer, "
+                    f"Relevant medical information could not be found in the reference documents in your account ({doc_list_str}). "
+                    f"They do not contain clinical evidence or recommendations regarding '{target_subject}'. To receive an evidence-grounded answer, "
                     f"please upload a medical reference document covering {target_subject} or consult authorized clinical guidelines."
                 )
             else:
                 fallback_no_context = (
-                    "No reference documents are currently available in your account. "
+                    "Relevant medical information could not be found. No reference documents are currently available in your account. "
                     "Please upload your medical reference documents to receive evidence-grounded clinical answers."
                 )
 
@@ -4202,13 +4202,13 @@ class RAGService:
             if accessible_docs:
                 doc_list_str = ", ".join(accessible_docs)
                 fallback_answer = (
-                    f"The reference documents in your account ({doc_list_str}) do not contain clinical evidence "
-                    f"or recommendations regarding '{target_subject}'. To receive an evidence-grounded answer, "
+                    f"Relevant medical information could not be found in the reference documents in your account ({doc_list_str}). "
+                    f"They do not contain clinical evidence or recommendations regarding '{target_subject}'. To receive an evidence-grounded answer, "
                     f"please upload a medical reference document covering {target_subject} or consult authorized clinical guidelines."
                 )
             else:
                 fallback_answer = (
-                    "No reference documents are currently available in your account. "
+                    "Relevant medical information could not be found. No reference documents are currently available in your account. "
                     "Please upload your medical reference documents to receive evidence-grounded clinical answers."
                 )
 

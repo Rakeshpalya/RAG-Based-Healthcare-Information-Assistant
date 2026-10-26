@@ -6,6 +6,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field, ConfigDict
 
 from backend.rag.rag_service import RAGService
+from backend.services.vector_store_service import get_vector_store_service
 from backend.database.models import User
 from backend.api.auth_dependencies import get_optional_current_db_user
 from backend.security import rate_limiter
@@ -25,8 +26,11 @@ _rag_service_instance: Optional[RAGService] = None
 def get_rag_service() -> RAGService:
     """Returns a singleton or shared RAGService instance."""
     global _rag_service_instance
+    current_vs = get_vector_store_service()
     if _rag_service_instance is None:
-        _rag_service_instance = RAGService()
+        _rag_service_instance = RAGService(vector_store=current_vs)
+    elif _rag_service_instance.vector_store is not current_vs:
+        _rag_service_instance.vector_store = current_vs
     return _rag_service_instance
 
 

@@ -473,7 +473,7 @@ class ClinicalVerificationEngine:
             diag_words = [w for w in re.findall(r'\b[a-z]{3,}\b', diag) if w not in {"the", "and", "stage", "type"}]
             if diag_words and not any(w in ev_lower for w in diag_words):
                 unsupported.append(f"Diagnostic term '{diag}' is unsupported by evidence")
-            elif "no diagnosis" in ev_lower or not re.search(r'\bdiagnos\w*\b', ev_lower):
+            elif "no diagnosis" in ev_lower or re.search(r'\b(?:no\s+(?:formal\s+)?diagnosis|not\s+diagnosed|unconfirmed\s+diagnosis)\b', ev_lower):
                 unsupported.append(f"Diagnostic claim for '{diag}' is unsupported because evidence only documents symptoms or states no diagnosis")
 
         # Check recommendations and prescriptions

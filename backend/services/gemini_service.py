@@ -448,7 +448,7 @@ class GeminiService:
                 )
             if "429" in err_str or "resource exhausted" in err_str or "quota" in err_str:
                 raise GeminiServiceError(
-                    "Gemini quota or rate limit exceeded. Please wait a few moments and try your inquiry again.",
+                    "The AI generation service is temporarily unavailable due to high demand (Gemini quota or rate limit exceeded). Please wait a few moments and try your inquiry again.",
                     error_type="quota_error",
                     status_code=429
                 )
