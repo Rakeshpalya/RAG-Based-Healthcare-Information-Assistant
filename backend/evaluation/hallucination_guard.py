@@ -160,6 +160,7 @@ class HallucinationGuard:
         "prednisone", "prednisolone", "dexamethasone", "hydrocortisone", "budesonide",
         # Respiratory & Psychiatric
         "albuterol", "ipratropium", "tiotropium", "montelukast", "fluticasone",
+        "inhaler", "inhalers", "bronchodilator", "bronchodilators", "nebulizer", "corticosteroid", "corticosteroids",
         "levothyroxine", "synthroid", "gabapentin", "pregabalin", "sertraline", "fluoxetine",
         "escitalopram", "citalopram", "duloxetine", "venlafaxine", "bupropion"
     }
@@ -215,7 +216,9 @@ class HallucinationGuard:
     # Explicit diagnostic assertion patterns
     DIAGNOSIS_PATTERNS = [
         re.compile(r'\b(?:diagnosed\s+with|diagnosis\s+of|confirmed\s+case\s+of|suffers\s+from|patient\s+has)\s+([a-z0-9\s\-]{3,35})(?=[.,;]|\[|\band\b|$)', re.IGNORECASE),
-        re.compile(r'\b(?:stage\s+[1-4]|type\s+[12]|grade\s+[1-4]|class\s+[i-iv]+)\s+([a-z0-9\s\-]{3,35})', re.IGNORECASE)
+        re.compile(r'\b(?:stage\s+[1-4]|type\s+[12]|grade\s+[1-4]|class\s+[i-iv]+)\s+([a-z0-9\s\-]{3,35})', re.IGNORECASE),
+        re.compile(r'\b([a-z0-9\s\-]{3,35})\s+(?:was|is)\s+diagnosed\b', re.IGNORECASE),
+        re.compile(r'\b(?:a\s+)?diagnosis\s+of\s+([a-z0-9\s\-]{3,35})\s+was\s+(?:made|confirmed|established)\b', re.IGNORECASE),
     ]
 
     # Explicit prescriptive recommendation patterns
@@ -223,7 +226,8 @@ class HallucinationGuard:
         re.compile(r'\b(?:prescribe|prescribes|prescribed|prescribing|prescription)\s+([a-z0-9\s\-]{3,30})', re.IGNORECASE),
         re.compile(r'\b(?:recommend|recommends|recommended|recommending)\s+(?:that\s+patient\s+take|taking|the\s+use\s+of)?\s*([a-z0-9\s\-]{3,30})', re.IGNORECASE),
         re.compile(r'\b(?:should\s+(?:take|receive|start|administer|initiate))\s+([a-z0-9\s\-]{3,30})', re.IGNORECASE),
-        re.compile(r'\b(?:cure|cures|cured|curing|proven\s+to\s+cure|permanently\s+cure|treat|treats|treated|treating)\s+([a-z0-9\s\-]{3,35})(?=[.,;]|\[|\band\b|$)', re.IGNORECASE)
+        re.compile(r'\b(?:cure|cures|cured|curing|proven\s+to\s+cure|permanently\s+cure|treat|treats|treated|treating)\s+([a-z0-9\s\-]{3,35})(?=[.,;]|\[|\band\b|$)', re.IGNORECASE),
+        re.compile(r'\b([a-z0-9\s\-]{3,30})\s+(?:treatment\s+)?(?:was|is)\s+prescribed\b', re.IGNORECASE),
     ]
 
     @classmethod
@@ -249,7 +253,17 @@ class HallucinationGuard:
         # 3. Negations
         found_negations = []
         for phrase in cls.NEGATION_PHRASES:
-            if phrase in text_lower:
+            if phrase == "without":
+                occurrences = [m.start() for m in re.finditer(r'\bwithout\b', text_lower)]
+                is_only_with_or_without = True
+                for idx in occurrences:
+                    prefix = text_lower[max(0, idx - 10):idx]
+                    if not re.search(r'\bwith\s+or\s+$', prefix):
+                        is_only_with_or_without = False
+                        break
+                if occurrences and not is_only_with_or_without:
+                    found_negations.append(phrase)
+            elif phrase in text_lower:
                 found_negations.append(phrase)
         has_negation = len(found_negations) > 0
 
@@ -298,13 +312,33 @@ class HallucinationGuard:
 
     @classmethod
     def find_best_source_segment(cls, claim_text: str, source_text: str) -> Tuple[float, str]:
-        """Finds the source sentence/segment with the highest semantic similarity to the claim."""
+        """
+        Finds the source sentence/segment with the highest semantic similarity to the claim.
+        Evaluates the full claim, framing-stripped versions, and substantive sub-clauses
+        against all candidate source segments to prevent dilution by conversational preambles.
+        """
         if not claim_text or not source_text:
             return 0.0, ""
 
-        claim_vec = EmbeddingService.embed_query(claim_text)
-        if not claim_vec:
-            return 0.0, ""
+        # Claim variants to check
+        claim_candidates = [claim_text.strip()]
+        stripped_claim = re.sub(
+            r'^(?:based\s+on\s+(?:the\s+)?(?:provided|available|uploaded)?\s*(?:document|text|reference|sources?)[,\s]+|according\s+to\s+(?:the\s+)?(?:provided|available|uploaded)?\s*(?:document|text|reference|sources?)[,\s]+|the\s+document\s+(?:states|notes|mentions|indicates)\s+that\s+)',
+            '',
+            claim_text.strip(),
+            flags=re.IGNORECASE
+        ).strip()
+        if stripped_claim and stripped_claim != claim_text.strip() and len(stripped_claim) > 15:
+            claim_candidates.append(stripped_claim)
+
+        # Contrast or compound sub-clauses (e.g. "... though it lists risk factors such as ...")
+        sub_clauses = [
+            c.strip()
+            for c in re.split(r'(?:,\s*(?:though|although|however|but|while|whereas)\s+)', stripped_claim)
+            if len(c.strip()) > 15
+        ]
+        if len(sub_clauses) > 1:
+            claim_candidates.extend(sub_clauses)
 
         candidates = [source_text.strip()]
         segments = [
@@ -323,13 +357,17 @@ class HallucinationGuard:
         best_score = -1.0
         best_segment = candidates[0]
 
-        for cand in candidates[:25]:
-            s_vec = EmbeddingService.embed_query(cand)
-            if s_vec:
-                score = float(np.dot(claim_vec, s_vec))
-                if score > best_score:
-                    best_score = score
-                    best_segment = cand
+        for c_cand in claim_candidates[:3]:
+            c_vec = EmbeddingService.embed_query(c_cand)
+            if not c_vec:
+                continue
+            for cand in candidates[:25]:
+                s_vec = EmbeddingService.embed_query(cand)
+                if s_vec:
+                    score = float(np.dot(c_vec, s_vec))
+                    if score > best_score:
+                        best_score = score
+                        best_segment = cand
 
         return max(0.0, best_score), best_segment
 
@@ -363,7 +401,10 @@ class HallucinationGuard:
                 for clause in clauses:
                     if t_lower in clause:
                         negated_source_words.update(re.findall(r'\b[a-z]{4,}\b', clause))
-                pattern = rf'(?:\b\w+\b\s+){{0,4}}\b{re.escape(t_lower)}\b(?:\s+\b\w+\b){{0,5}}'
+                if t_lower == "without":
+                    pattern = rf'\bwithout\b(?:\s+\b\w+\b){{1,5}}'
+                else:
+                    pattern = rf'(?:\b\w+\b\s+){{0,4}}\b{re.escape(t_lower)}\b(?:\s+\b\w+\b){{0,5}}'
                 for m in re.finditer(pattern, src_lower):
                     negated_source_words.update(re.findall(r'\b[a-z]{4,}\b', m.group(0)))
 
@@ -628,10 +669,46 @@ class HallucinationGuard:
                         break
 
         # 6C. Clinical Target (Diagnosis & Recommendation) Grounding Check
+        src_lower = combined_cited_text.lower()
+        claim_lower = claim.claim_text.lower()
+
+        # Check diagnostic assertions against symptom-only or no-diagnosis sources
+        if re.search(r'\b(?:diagnos\w*|confirmed\s+case)\b', claim_lower):
+            if re.search(r'\bno\s+diagnosis\b', src_lower) or not re.search(r'\bdiagnos\w*\b', src_lower):
+                reasons.append("Claim asserts medical diagnosis was established, but reference evidence only documents symptoms or notes no diagnosis.")
+                return ClaimGuardDetail(
+                    claim_text=claim.claim_text,
+                    raw_sentence=claim.raw_sentence,
+                    cited_sources=valid_cits,
+                    is_supported=False,
+                    hallucination_type=HallucinationType.UNSUPPORTED_DIAGNOSIS,
+                    reasons=reasons,
+                    support_scores=scores,
+                    best_support_score=best_support_score,
+                    best_source_id=best_source_id,
+                    entities=entities
+                )
+
+        # Check prescription assertions against non-prescriptive sources
+        if re.search(r'\b(?:prescrib\w*|prescription)\b', claim_lower):
+            if not re.search(r'\b(?:prescrib\w*|prescription)\b', src_lower):
+                reasons.append("Claim asserts treatment was prescribed, but reference evidence does not document a prescription.")
+                return ClaimGuardDetail(
+                    claim_text=claim.claim_text,
+                    raw_sentence=claim.raw_sentence,
+                    cited_sources=valid_cits,
+                    is_supported=False,
+                    hallucination_type=HallucinationType.UNSUPPORTED_RECOMMENDATION,
+                    reasons=reasons,
+                    support_scores=scores,
+                    best_support_score=best_support_score,
+                    best_source_id=best_source_id,
+                    entities=entities
+                )
+
+        unsupported_targets = []
         targets_to_check = entities.diagnoses + entities.recommendations
         if targets_to_check:
-            src_lower = combined_cited_text.lower()
-            unsupported_targets = []
             for target in targets_to_check:
                 clean_target = target.strip().lower()
                 tokens = [w for w in re.findall(r'\b[a-z]{3,}\b', clean_target) if w not in {"the", "for", "and", "with", "patient", "has", "been", "immediate", "proven", "permanently"}]
@@ -675,7 +752,14 @@ class HallucinationGuard:
                 )
 
         # 7. Semantic Grounding Threshold Check (0.65)
-        if best_support_score < cls.SUPPORT_SIMILARITY_THRESHOLD:
+        is_borderline_lexically_grounded = False
+        if 0.55 <= best_support_score < cls.SUPPORT_SIMILARITY_THRESHOLD and not unsupported_targets:
+            claim_tokens = [w for w in re.findall(r'\b[a-z]{4,}\b', claim.claim_text.lower()) if w not in {"this", "that", "with", "from", "have", "been", "based", "according", "document", "provided"}]
+            matching_tokens = [t for t in claim_tokens if t in src_lower]
+            if len(matching_tokens) >= 3 and (len(matching_tokens) / max(len(claim_tokens), 1)) >= 0.35:
+                is_borderline_lexically_grounded = True
+
+        if best_support_score < cls.SUPPORT_SIMILARITY_THRESHOLD and not is_borderline_lexically_grounded:
             if wrong_source_match is not None:
                 reasons.append(
                     f"Claim is unsupported by cited source(s) (wrong source attribution): Claim cites [Source {valid_cits[0]}], "

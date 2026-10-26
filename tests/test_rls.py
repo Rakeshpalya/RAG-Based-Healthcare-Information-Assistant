@@ -128,6 +128,10 @@ def test_sqlalchemy_direct_connection_auth_uid_limitation():
     from backend.config import settings
     # Test against actual configured PostgreSQL connection
     if settings.DATABASE_URL.startswith("postgresql"):
+        try:
+            import psycopg2
+        except ImportError:
+            pytest.skip("psycopg2 is not installed in local environment")
         engine = create_engine(settings.DATABASE_URL, connect_args={"connect_timeout": 10})
         try:
             with engine.connect() as conn:

@@ -128,7 +128,7 @@ def test_hallucinated_citation_pruning():
     mock_vs = MagicMock(spec=VectorStoreService)
     # Only 1 chunk retrieved
     mock_vs.search.return_value = [
-        {"document_id": "doc1", "chunk_id": "c1", "page_number": 1, "similarity_score": 0.80, "text": "Only one chunk available", "metadata": {"filename": "doc1.pdf"}}
+        {"document_id": "doc1", "chunk_id": "c1", "page_number": 1, "similarity_score": 0.80, "text": "Based on the evidence, only one chunk is available.", "metadata": {"filename": "doc1.pdf"}}
     ]
 
     rag_service = RAGService(vector_store=mock_vs)

@@ -52,6 +52,21 @@ class VectorStoreService:
         """Returns the total number of vectors currently stored in the FAISS index."""
         return int(self.index.ntotal)
 
+    def get_accessible_document_names(self, user_id: Optional[Any] = None) -> List[str]:
+        """Returns unique document names accessible to the given user."""
+        docs = set()
+        for record in self.metadata_store:
+            if user_id is not None:
+                rec_user_id = record.get("user_id")
+                if rec_user_id is None:
+                    rec_user_id = record.get("metadata", {}).get("user_id")
+                if rec_user_id is not None and str(rec_user_id) != str(user_id):
+                    continue
+            fname = record.get("metadata", {}).get("filename") or record.get("document_id")
+            if fname and str(fname).strip():
+                docs.add(str(fname).strip())
+        return sorted(list(docs))
+
     def reset(self) -> None:
         """Resets the FAISS index and clears all associated metadata records."""
         self.index = faiss.IndexFlatIP(self.dimension)
@@ -147,6 +162,7 @@ class VectorStoreService:
         # Check if embeddings are already present in chunks
         has_embeddings = all("embedding" in chunk and chunk["embedding"] for chunk in chunks)
         if not has_embeddings:
+            from backend.services.embedding_service import EmbeddingService
             embedded_chunks = EmbeddingService.embed_chunks(chunks)
         else:
             embedded_chunks = chunks
@@ -242,10 +258,10 @@ class VectorStoreService:
                         continue
 
 
-                # Ensure candidate pool is not monopolized by identical duplicate chunk vectors
+                # Ensure candidate pool is not monopolized by identical duplicate chunk vectors within the same document
                 c_norm = " ".join(record.get("text", "").strip().split())
                 c_hash = hashlib.sha256(c_norm.encode("utf-8")).hexdigest()
-                cand_key = c_hash if c_hash else (record.get("document_id"), record.get("chunk_id"))
+                cand_key = (record.get("document_id"), c_hash) if c_hash else (record.get("document_id"), record.get("chunk_id"))
                 if cand_key in seen_candidates:
                     continue
                 seen_candidates.add(cand_key)

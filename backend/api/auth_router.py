@@ -194,9 +194,19 @@ def login(payload: LoginRequest) -> Dict[str, Any]:
             err_name,
             err_msg,
         )
+        is_dns_or_connection_error = any(
+            t in err_name.lower() or t in err_msg.lower()
+            for t in ["connecterror", "connectionrefused", "getaddrinfo failed", "nodename nor servname"]
+        )
+        if is_dns_or_connection_error:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Authentication service temporarily unavailable. Please try again later.",
+            )
+
         is_network_timeout = any(
             t in err_name.lower() or t in err_msg.lower()
-            for t in ["timeout", "connect", "handshake", "remotedisconnected", "ssl"]
+            for t in ["timeout", "timed out", "timedout", "handshake", "remotedisconnected", "ssl"]
         )
         if is_network_timeout:
             raise HTTPException(

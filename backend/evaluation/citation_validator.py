@@ -151,7 +151,7 @@ class CitationValidator:
                     continue
             kept = [n for n in numbers if n not in invalid]
             if not kept:
-                return ""
+                return " "
             if kept == numbers:
                 return match.group(0)
             if len(kept) == 1:
@@ -159,7 +159,8 @@ class CitationValidator:
             inner = ", ".join(f"Source {n}" for n in kept)
             return f"[{inner}]"
 
-        return cls.CITATION_BRACKET_PATTERN.sub(_replace, text)
+        replaced = cls.CITATION_BRACKET_PATTERN.sub(_replace, text)
+        return re.sub(r'[ \t]+', ' ', replaced)
 
     @classmethod
     def is_structural_or_meta(cls, text: str) -> bool:
@@ -179,20 +180,46 @@ class CitationValidator:
         # Delimiters
         if re.match(r'^(?:[-=_*~]{3,}|===.*===)$', s):
             return True
-        # Disclaimers & standard refusals
+        # Disclaimers, assistant persona notices & standard refusals
         lower = s.lower()
         if any(p in lower for p in [
             "medical disclaimer",
             "always consult a qualified",
             "always consult your doctor",
+            "consult a qualified",
+            "consult a licensed",
             "experiencing a medical emergency",
             "relevant medical information could not be found",
             "to prevent unsupported healthcare answers",
             "the available documents do not contain",
             "not enough information",
             "could not be found in the available reference documents",
-            "generation was halted"
+            "generation was halted",
+            "informational research assistant",
+            "not a physician",
+            "not a doctor",
+            "personalized clinical advice",
+            "personalized medical advice",
+            "personalized clinical guidance",
+            "for clinical decisions, please consult",
+            "please consult a qualified",
+            "as an ai",
         ]):
+            return True
+        # Asterisk-wrapped disclaimers: *Note: ...*
+        if re.search(r'\b(?:note|disclaimer)\b.*?\b(?:physician|doctor|healthcare professional|medical advice|clinical advice)\b', lower):
+            return True
+        # Explicit absence of evidence / scope limitation statements (Requirement 6.7 & 6.10)
+        if re.search(
+            r'\b(?:do(?:es)?\s+not\s+(?:explicitly\s+)?(?:state|contain|mention|identify|detail|list|specify|provide|describe)|'
+            r'not\s+(?:explicitly\s+)?(?:stated|mentioned|found|provided|detailed|covered|identified)\s+in|'
+            r'the\s+(?:provided|available|uploaded)\s+documents?\s+do\s+not|'
+            r'the\s+(?:provided|available|uploaded)\s+text\s+does\s+not|'
+            r'not\s+contain\s+information\s+(?:detailing|about|regarding)|'
+            r'does\s+not\s+provide\s+specific|'
+            r'without\s+a\s+numbered\s+recommendation)\b',
+            lower
+        ):
             return True
         return False
 
@@ -258,33 +285,49 @@ class CitationValidator:
         """
         Computes maximum semantic similarity between a claim and a source passage.
         Checks both the overall source passage and individual lines/sentences to prevent
-        dilution in long chunks.
+        dilution in long chunks. Also evaluates substantive sub-clauses when framing preambles exist.
         """
         if not claim_text or not source_text:
             return 0.0
 
-        claim_vec = EmbeddingService.embed_query(claim_text)
-        if not claim_vec:
-            return 0.0
+        # Substantive claim candidate variants
+        claim_candidates = [claim_text.strip()]
+        stripped_claim = re.sub(
+            r'^(?:based\s+on\s+(?:the\s+)?(?:provided|available|uploaded)?\s*(?:document|text|reference|sources?)[,\s]+|according\s+to\s+(?:the\s+)?(?:provided|available|uploaded)?\s*(?:document|text|reference|sources?)[,\s]+|the\s+document\s+(?:states|notes|mentions|indicates)\s+that\s+)',
+            '',
+            claim_text.strip(),
+            flags=re.IGNORECASE
+        ).strip()
+        if stripped_claim and stripped_claim != claim_text.strip() and len(stripped_claim) > 15:
+            claim_candidates.append(stripped_claim)
 
-        # Overall source passage similarity
-        src_vec = EmbeddingService.embed_query(source_text)
-        if not src_vec:
-            return 0.0
+        sub_clauses = [
+            c.strip()
+            for c in re.split(r'(?:,\s*(?:though|although|however|but|while|whereas)\s+)', stripped_claim)
+            if len(c.strip()) > 15
+        ]
+        if len(sub_clauses) > 1:
+            claim_candidates.extend(sub_clauses)
 
-        scores = [float(np.dot(claim_vec, src_vec))]
-
-        # If source has multiple lines or sentences, also check best matching segment
+        # Build candidate source segments
+        src_candidates = [source_text.strip()]
         segments = [
             seg.strip()
             for seg in re.split(r'(?:\n+|\.\s+)', source_text)
             if len(seg.strip()) > 10
         ]
-        if len(segments) > 1:
-            for seg in segments[:15]:
-                seg_vec = EmbeddingService.embed_query(seg)
-                if seg_vec:
-                    scores.append(float(np.dot(claim_vec, seg_vec)))
+        if segments:
+            src_candidates.extend(segments[:15])
+
+        scores = [0.0]
+        for c_cand in claim_candidates[:3]:
+            claim_vec = EmbeddingService.embed_query(c_cand)
+            if not claim_vec:
+                continue
+            for s_cand in src_candidates:
+                s_vec = EmbeddingService.embed_query(s_cand)
+                if s_vec:
+                    scores.append(float(np.dot(claim_vec, s_vec)))
 
         return max(scores)
 

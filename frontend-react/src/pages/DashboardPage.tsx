@@ -2,8 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useHealth } from '../context/HealthContext';
-import { documentApi } from '../api/documentApi';
-import { conversationApi } from '../api/conversationApi';
+import { documentApi, normalizeDocumentList } from '../api/documentApi';
+import { conversationApi, normalizeConversationList } from '../api/conversationApi';
 import { DocumentRecord, Conversation } from '../types';
 import { DocumentUploadModal } from '../components/documents/DocumentUploadModal';
 import { cleanDocumentName, formatDate } from '../utils/formatters';
@@ -15,6 +15,8 @@ import {
   Activity,
   Clock,
   Loader2,
+  AlertCircle,
+  RefreshCw,
 } from 'lucide-react';
 
 export const DashboardPage: React.FC = () => {
@@ -24,10 +26,14 @@ export const DashboardPage: React.FC = () => {
   const [documents, setDocuments] = useState<DocumentRecord[]>([]);
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [documentsError, setDocumentsError] = useState<string | null>(null);
+  const [conversationsError, setConversationsError] = useState<string | null>(null);
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
 
   const fetchDashboardData = async () => {
     setIsLoading(true);
+    setDocumentsError(null);
+    setConversationsError(null);
     try {
       const [docsRes, convsRes] = await Promise.allSettled([
         documentApi.listDocuments(0, 5),
@@ -35,10 +41,23 @@ export const DashboardPage: React.FC = () => {
       ]);
 
       if (docsRes.status === 'fulfilled') {
-        setDocuments(docsRes.value);
+        setDocuments(normalizeDocumentList(docsRes.value));
+        setDocumentsError(null);
+      } else {
+        setDocuments([]);
+        setDocumentsError(
+          docsRes.reason?.message || 'Unable to load documents. Please try again.'
+        );
       }
+
       if (convsRes.status === 'fulfilled') {
-        setConversations(convsRes.value);
+        setConversations(normalizeConversationList(convsRes.value));
+        setConversationsError(null);
+      } else {
+        setConversations([]);
+        setConversationsError(
+          convsRes.reason?.message || 'Unable to load consultations. Please try again.'
+        );
       }
     } finally {
       setIsLoading(false);
@@ -48,6 +67,9 @@ export const DashboardPage: React.FC = () => {
   useEffect(() => {
     fetchDashboardData();
   }, []);
+
+  const safeDocuments = Array.isArray(documents) ? documents : [];
+  const safeConversations = Array.isArray(conversations) ? conversations : [];
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
@@ -96,7 +118,7 @@ export const DashboardPage: React.FC = () => {
             <FileText className="w-4 h-4 text-sky-600" />
           </div>
           <div className="text-2xl font-bold text-slate-900">
-            {isLoading ? <Loader2 className="w-5 h-5 animate-spin text-slate-400" /> : documents.length}
+            {isLoading ? <Loader2 className="w-5 h-5 animate-spin text-slate-400" /> : safeDocuments.length}
           </div>
           <p className="text-[11px] text-slate-400">Available in personal clinical vector space</p>
         </div>
@@ -107,7 +129,7 @@ export const DashboardPage: React.FC = () => {
             <MessageSquare className="w-4 h-4 text-emerald-600" />
           </div>
           <div className="text-2xl font-bold text-slate-900">
-            {isLoading ? <Loader2 className="w-5 h-5 animate-spin text-slate-400" /> : conversations.length}
+            {isLoading ? <Loader2 className="w-5 h-5 animate-spin text-slate-400" /> : safeConversations.length}
           </div>
           <p className="text-[11px] text-slate-400">Saved clinical dialogue histories</p>
         </div>
@@ -152,11 +174,29 @@ export const DashboardPage: React.FC = () => {
           </div>
 
           {isLoading ? (
-            <div className="py-8 text-center">
+            <div className="py-8 text-center" data-testid="documents-loading">
               <Loader2 className="w-6 h-6 animate-spin text-slate-400 mx-auto" />
             </div>
-          ) : documents.length === 0 ? (
-            <div className="py-8 text-center text-xs text-slate-500 space-y-2">
+          ) : documentsError ? (
+            <div
+              className="py-6 px-4 text-center rounded-xl bg-rose-50/60 border border-rose-200/60 space-y-2.5"
+              data-testid="documents-error"
+            >
+              <div className="flex items-center justify-center gap-2 text-rose-700">
+                <AlertCircle className="w-4 h-4 shrink-0" />
+                <p className="text-xs font-medium">{documentsError}</p>
+              </div>
+              <button
+                onClick={() => fetchDashboardData()}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-rose-600 text-white text-xs font-semibold hover:bg-rose-700 transition-colors shadow-2xs"
+                data-testid="retry-documents-btn"
+              >
+                <RefreshCw className="w-3.5 h-3.5" />
+                <span>Retry</span>
+              </button>
+            </div>
+          ) : safeDocuments.length === 0 ? (
+            <div className="py-8 text-center text-xs text-slate-500 space-y-2" data-testid="documents-empty">
               <p>No documents uploaded yet.</p>
               <button
                 onClick={() => setIsUploadModalOpen(true)}
@@ -166,8 +206,8 @@ export const DashboardPage: React.FC = () => {
               </button>
             </div>
           ) : (
-            <div className="divide-y divide-slate-100">
-              {documents.map((doc) => (
+            <div className="divide-y divide-slate-100" data-testid="documents-list">
+              {safeDocuments.map((doc) => (
                 <div key={doc.id} className="py-2.5 flex items-center justify-between text-xs">
                   <div className="min-w-0 pr-2">
                     <p className="font-semibold text-slate-800 truncate" title={doc.filename}>
@@ -205,19 +245,37 @@ export const DashboardPage: React.FC = () => {
           </div>
 
           {isLoading ? (
-            <div className="py-8 text-center">
+            <div className="py-8 text-center" data-testid="conversations-loading">
               <Loader2 className="w-6 h-6 animate-spin text-slate-400 mx-auto" />
             </div>
-          ) : conversations.length === 0 ? (
-            <div className="py-8 text-center text-xs text-slate-500 space-y-2">
+          ) : conversationsError ? (
+            <div
+              className="py-6 px-4 text-center rounded-xl bg-rose-50/60 border border-rose-200/60 space-y-2.5"
+              data-testid="conversations-error"
+            >
+              <div className="flex items-center justify-center gap-2 text-rose-700">
+                <AlertCircle className="w-4 h-4 shrink-0" />
+                <p className="text-xs font-medium">{conversationsError}</p>
+              </div>
+              <button
+                onClick={() => fetchDashboardData()}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-rose-600 text-white text-xs font-semibold hover:bg-rose-700 transition-colors shadow-2xs"
+                data-testid="retry-conversations-btn"
+              >
+                <RefreshCw className="w-3.5 h-3.5" />
+                <span>Retry</span>
+              </button>
+            </div>
+          ) : safeConversations.length === 0 ? (
+            <div className="py-8 text-center text-xs text-slate-500 space-y-2" data-testid="conversations-empty">
               <p>No recent consultations found.</p>
               <Link to="/chat" className="text-sky-600 font-semibold hover:underline inline-block">
                 Start a new clinical chat
               </Link>
             </div>
           ) : (
-            <div className="divide-y divide-slate-100">
-              {conversations.map((conv) => (
+            <div className="divide-y divide-slate-100" data-testid="conversations-list">
+              {safeConversations.map((conv) => (
                 <Link
                   key={conv.id}
                   to={`/chat?id=${conv.id}`}

@@ -41,7 +41,7 @@ export const ChatPage: React.FC = () => {
   const loadConversations = useCallback(async () => {
     try {
       const data = await conversationApi.listConversations(0, 50);
-      setConversations(data);
+      setConversations(Array.isArray(data) ? data : []);
     } catch {
       // offline or unauthenticated fallback
     }
@@ -132,8 +132,8 @@ export const ChatPage: React.FC = () => {
     setMessages(nextMessages);
 
     // 2. Prepare conversation history for Phase 6.9 longitudinal context
-    // Extracts recent turns (user & assistant) to maintain dialogue state & contraindications
-    const historyPayload = nextMessages.slice(-6).map((m) => ({
+    // Extracts recent turns (user & assistant) prior to the current question to maintain dialogue state
+    const historyPayload = messages.slice(-6).map((m) => ({
       role: m.sender === 'user' ? ('user' as const) : ('assistant' as const),
       content: m.text,
     }));

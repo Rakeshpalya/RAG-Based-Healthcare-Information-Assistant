@@ -82,6 +82,7 @@ class ClinicalVerificationEngine:
         "prednisone", "prednisolone", "dexamethasone", "hydrocortisone", "budesonide",
         # Respiratory & Psychiatric
         "albuterol", "ipratropium", "tiotropium", "montelukast", "fluticasone",
+        "inhaler", "inhalers", "bronchodilator", "bronchodilators", "nebulizer", "corticosteroid", "corticosteroids",
         "levothyroxine", "synthroid", "gabapentin", "pregabalin", "sertraline", "fluoxetine",
         "escitalopram", "citalopram", "duloxetine", "venlafaxine", "bupropion"
     }
@@ -137,7 +138,9 @@ class ClinicalVerificationEngine:
     # Explicit diagnostic assertion patterns
     DIAGNOSIS_PATTERNS = [
         re.compile(r'\b(?:diagnosed\s+with|diagnosis\s+of|confirmed\s+case\s+of|suffers\s+from|patient\s+has)\s+([a-z0-9\s\-]{3,35})(?=[.,;]|\[|\band\b|$)', re.IGNORECASE),
-        re.compile(r'\b(?:stage\s+[1-4]|type\s+[12]|grade\s+[1-4]|class\s+[i-iv]+)\s+([a-z0-9\s\-]{3,35})', re.IGNORECASE)
+        re.compile(r'\b(?:stage\s+[1-4]|type\s+[12]|grade\s+[1-4]|class\s+[i-iv]+)\s+([a-z0-9\s\-]{3,35})', re.IGNORECASE),
+        re.compile(r'\b([a-z0-9\s\-]{3,35})\s+(?:was|is)\s+diagnosed\b', re.IGNORECASE),
+        re.compile(r'\b(?:a\s+)?diagnosis\s+of\s+([a-z0-9\s\-]{3,35})\s+was\s+(?:made|confirmed|established)\b', re.IGNORECASE),
     ]
 
     # Explicit prescriptive recommendation patterns
@@ -145,7 +148,8 @@ class ClinicalVerificationEngine:
         re.compile(r'\b(?:prescribe|prescribes|prescribed|prescribing|prescription)\s+([a-z0-9\s\-]{3,30})', re.IGNORECASE),
         re.compile(r'\b(?:recommend|recommends|recommended|recommending)\s+(?:that\s+patient\s+take|taking|the\s+use\s+of)?\s*([a-z0-9\s\-]{3,30})', re.IGNORECASE),
         re.compile(r'\b(?:should\s+(?:take|receive|start|administer|initiate))\s+([a-z0-9\s\-]{3,30})', re.IGNORECASE),
-        re.compile(r'\b(?:cure|cures|cured|curing|proven\s+to\s+cure|permanently\s+cure)\s+([a-z0-9\s\-]{3,35})(?=[.,;]|\[|\band\b|$)', re.IGNORECASE)
+        re.compile(r'\b(?:cure|cures|cured|curing|proven\s+to\s+cure|permanently\s+cure)\s+([a-z0-9\s\-]{3,35})(?=[.,;]|\[|\band\b|$)', re.IGNORECASE),
+        re.compile(r'\b([a-z0-9\s\-]{3,30})\s+(?:treatment\s+)?(?:was|is)\s+prescribed\b', re.IGNORECASE),
     ]
 
     # Prohibited post-generation prescriptive phrases to sanitize
@@ -238,34 +242,83 @@ class ClinicalVerificationEngine:
     def check_directional_contradiction(
         cls,
         claim_entities: ExtractedClinicalEntities,
-        source_text: str
+        source_text: str,
+        claim_text: Optional[str] = None
     ) -> Tuple[bool, Optional[str]]:
         """
-        Detects if clinical trajectory in claim inverts the trajectory in the reference text.
-        e.g., Claim says 'increases blood pressure' while Source says 'decreases blood pressure'.
+        Detects if clinical trajectory in claim inverts the trajectory in the reference text
+        concerning the same physiological parameter or outcome (e.g. blood pressure, glucose, weight).
+        Static diagnostic descriptions (e.g. 'high blood pressure') are not treated as directional
+        inversions unless an active causal trajectory is asserted against reference evidence.
         """
         if not claim_entities.direction or claim_entities.direction == "MIXED":
             return False, None
 
+        if not source_text or not isinstance(source_text, str):
+            return False, None
+
         src_lower = source_text.lower()
-        src_words = set(re.findall(r'\b[a-z0-9\-]+\b', src_lower))
+        claim_str = (claim_text or "").lower()
 
-        src_ups = bool(src_words & cls.DIRECTION_UP_TERMS)
-        src_downs = bool(src_words & cls.DIRECTION_DOWN_TERMS)
+        # Identify physiological parameter / outcome target (e.g. blood pressure, glucose, weight)
+        target_parameters = [
+            "blood pressure", "systolic", "diastolic", "glucose", "blood sugar",
+            "cholesterol", "lipid", "weight", "heart rate", "pulse", "creatinine",
+            "potassium", "sodium", "mortality", "risk"
+        ]
 
-        # If claim says UP but source only mentions DOWN
-        if claim_entities.direction == "UP" and src_downs and not src_ups:
-            return True, (
-                f"Directional Contradiction: Claim asserts elevation/increase "
-                f"({', '.join(claim_entities.direction_terms)}), but evidence indicates reduction/decrease."
-            )
+        shared_targets = [
+            tgt for tgt in target_parameters
+            if (tgt in claim_str or any(tgt in str(e).lower() for e in (claim_entities.diagnoses + claim_entities.recommendations)))
+            and tgt in src_lower
+        ]
 
-        # If claim says DOWN but source only mentions UP
-        if claim_entities.direction == "DOWN" and src_ups and not src_downs:
-            return True, (
-                f"Directional Contradiction: Claim asserts reduction/decrease "
-                f"({', '.join(claim_entities.direction_terms)}), but evidence indicates elevation/increase."
-            )
+        if not shared_targets:
+            return False, None
+
+        # Exclude static descriptive phrases from being directional inversions (e.g. "patient has high blood pressure")
+        static_state_pattern = re.compile(
+            r'\b(?:diagnos\w*|patient\s+has|stage\s+[1-4]|type\s+[12]|with|history\s+of)\s+(?:high|elevated)\s+(?:blood\s+pressure|glucose|cholesterol)',
+            re.IGNORECASE
+        )
+        if claim_str and static_state_pattern.search(claim_str):
+            return False, None
+
+        src_segments = [seg.strip() for seg in re.split(r'[.\n;•]+', src_lower) if seg.strip()]
+
+        for tgt in shared_targets:
+            tgt_pattern = re.compile(r'\b' + re.escape(tgt) + r'\b', re.IGNORECASE)
+            for seg in src_segments:
+                if tgt_pattern.search(seg):
+                    seg_words = set(re.findall(r'\b[a-z0-9\-]+\b', seg))
+                    seg_ups = bool(seg_words & cls.DIRECTION_UP_TERMS)
+                    seg_downs = bool(seg_words & cls.DIRECTION_DOWN_TERMS)
+
+                    active_up_verbs = {
+                        "increase", "increases", "increased", "increasing",
+                        "raise", "raises", "raised", "raising",
+                        "elevate", "elevates", "elevating",
+                        "worsen", "worsens", "spike", "spikes"
+                    }
+                    if claim_entities.direction == "UP" and seg_downs and not seg_ups:
+                        if any(v in claim_entities.direction_terms for v in active_up_verbs):
+                            return True, (
+                                f"Directional Contradiction: Claim asserts elevation/increase of {tgt} "
+                                f"({', '.join(claim_entities.direction_terms)}), but evidence indicates reduction/decrease ({seg[:80]})."
+                            )
+
+                    active_down_verbs = {
+                        "decrease", "decreases", "decreased", "decreasing",
+                        "lower", "lowers", "lowered", "lowering",
+                        "reduce", "reduces", "reduced", "reducing",
+                        "lessen", "lessens"
+                    }
+                    if claim_entities.direction == "DOWN" and seg_ups and not seg_downs:
+                        if any(v in claim_entities.direction_terms for v in active_down_verbs):
+                            return True, (
+                                f"Directional Contradiction: Claim asserts reduction/decrease of {tgt} "
+                                f"({', '.join(claim_entities.direction_terms)}), but evidence indicates elevation/increase ({seg[:80]})."
+                            )
 
         return False, None
 
@@ -273,32 +326,92 @@ class ClinicalVerificationEngine:
     def check_negation_conflict(
         cls,
         claim_entities: ExtractedClinicalEntities,
-        source_text: str
+        source_text: str,
+        claim_text: Optional[str] = None
     ) -> Tuple[bool, Optional[str]]:
         """
-        Detects polarity inversion between claim and reference passage.
-        e.g., Claim asserts drug is indicated when source marks it contraindicated or to be avoided.
+        Detects polarity inversion between claim and reference passage about the same subject and action.
+        e.g., Claim asserts drug/intervention is indicated when source marks it contraindicated or to be avoided,
+        or Claim asserts contraindication when source marks it indicated/recommended.
         """
+        if not source_text or not isinstance(source_text, str):
+            return False, None
+
         src_lower = source_text.lower()
-        src_has_contraindication = any(
-            p in src_lower for p in [
-                "contraindicated", "contraindication", "contraindications",
-                "not recommended", "avoid", "should not be used", "harmful"
+
+        # 1. Gather clinical subjects/interventions targeted by the claim
+        subjects: List[str] = []
+        if claim_entities.medications:
+            subjects.extend(claim_entities.medications)
+        if claim_entities.diagnoses:
+            subjects.extend(claim_entities.diagnoses)
+        if claim_entities.recommendations:
+            subjects.extend(claim_entities.recommendations)
+
+        text_for_subjects = claim_text or ""
+        if text_for_subjects:
+            lifestyle_subjects = [
+                "exercise", "activity", "diet", "sodium", "salt", "potassium",
+                "smoking", "tobacco", "alcohol", "weight", "caffeine", "nsaid", "nsaids"
             ]
-        )
+            for ls in lifestyle_subjects:
+                if re.search(r'\b' + ls + r'\b', text_for_subjects.lower()):
+                    subjects.append(ls)
 
-        if not claim_entities.has_negation and src_has_contraindication:
-            # Claim recommends or asserts safe use, but source contraindicates
-            return True, "Negation Contradiction: Evidence explicitly contraindicates or warns against the intervention."
+        subjects = sorted(list(set(s.lower().strip() for s in subjects if s and len(s) >= 3)))
 
-        if claim_entities.has_negation and not src_has_contraindication:
-            # Check if claim falsely asserts contraindication
+        if not subjects:
+            return False, None
+
+        # Split source into complete sentences (by periods, newlines, semicolons, and bullets)
+        src_segments = [seg.strip() for seg in re.split(r'[.\n;•]+', src_lower) if seg.strip()]
+
+        contraindication_markers = [
+            "contraindicated", "contraindication", "contraindications",
+            "not recommended", "avoid", "avoiding", "avoided", "should not", "do not", "does not",
+            "cannot", "unsafe", "harmful", "prohibited", "prohibit", "stop taking"
+        ]
+        positive_indication_markers = [
+            "indicated", "recommended", "first-line", "effective", "effectively", "beneficial",
+            "should take", "should receive", "advise", "advised", "prescribe", "standard"
+        ]
+
+        def _marker_governs_subject(subj_str: str, text_seg: str, markers: List[str]) -> Tuple[bool, Optional[str]]:
+            # Proximity check: marker within 8 words before or after subject to ensure it governs the subject
+            for m in markers:
+                p1 = rf'\b{re.escape(m)}\b(?:\s+[\w\d-]+){{0,8}}\s+\b{re.escape(subj_str)}\b'
+                p2 = rf'\b{re.escape(subj_str)}\b(?:\s+[\w\d-]+){{0,8}}\s+\b{re.escape(m)}\b'
+                if re.search(p1, text_seg, re.IGNORECASE) or re.search(p2, text_seg, re.IGNORECASE):
+                    return True, m
+            return False, None
+
+        # Case 1: Claim asserts safe use / recommendation (NO negation), but source contraindicates THAT SAME subject
+        if not claim_entities.has_negation:
+            for subj in subjects:
+                for seg in src_segments:
+                    has_marker, matched_m = _marker_governs_subject(subj, seg, contraindication_markers)
+                    if has_marker:
+                        return True, (
+                            f"Negation Contradiction: Evidence explicitly contraindicates or warns against "
+                            f"'{subj}': '{seg[:100]}'."
+                        )
+
+        # Case 2: Claim asserts contraindication/avoidance (HAS negation), but source explicitly recommends THAT SAME subject
+        if claim_entities.has_negation:
             claim_contra = any(
-                p in claim_entities.negation_terms
-                for p in ["contraindicated", "contraindication", "should not", "avoid"]
-            )
-            if claim_contra and any(p in src_lower for p in ["indicated", "recommended", "first-line", "effective"]):
-                return True, "Negation Contradiction: Claim asserts contraindication contrary to supporting guideline."
+                p in (claim_entities.negation_terms or [])
+                for p in ["contraindicated", "contraindication", "should not", "avoid", "do not", "unsafe", "harmful"]
+            ) or (text_for_subjects and any(m in text_for_subjects.lower() for m in ["avoid", "do not", "contraindicated", "should not"]))
+
+            if claim_contra:
+                for subj in subjects:
+                    for seg in src_segments:
+                        has_marker, matched_m = _marker_governs_subject(subj, seg, positive_indication_markers)
+                        if has_marker:
+                            return True, (
+                                f"Negation Contradiction: Claim asserts contraindication for '{subj}' "
+                                f"contrary to supporting evidence: '{seg[:100]}'."
+                            )
 
         return False, None
 
@@ -360,6 +473,14 @@ class ClinicalVerificationEngine:
             diag_words = [w for w in re.findall(r'\b[a-z]{3,}\b', diag) if w not in {"the", "and", "stage", "type"}]
             if diag_words and not any(w in ev_lower for w in diag_words):
                 unsupported.append(f"Diagnostic term '{diag}' is unsupported by evidence")
+            elif "no diagnosis" in ev_lower or not re.search(r'\bdiagnos\w*\b', ev_lower):
+                unsupported.append(f"Diagnostic claim for '{diag}' is unsupported because evidence only documents symptoms or states no diagnosis")
+
+        # Check recommendations and prescriptions
+        for rec in claim_entities.recommendations:
+            rec_words = [w for w in re.findall(r'\b[a-z]{3,}\b', rec) if w not in {"the", "and", "treatment", "was", "for"}]
+            if rec_words and not any(w in ev_lower for w in rec_words):
+                unsupported.append(f"Prescription/recommendation '{rec}' is unsupported by evidence")
 
         return len(unsupported) > 0, unsupported
 
@@ -607,7 +728,7 @@ class ClinicalVerificationEngine:
             target_evidence = " ".join(cited_texts) if cited_texts else combined_evidence
 
             # A. Directional contradiction check
-            is_dir_contra, dir_reason = cls.check_directional_contradiction(entities, target_evidence)
+            is_dir_contra, dir_reason = cls.check_directional_contradiction(entities, target_evidence, claim_text=clm.claim_text)
             if is_dir_contra:
                 contradictions_count += 1
                 verification_claims.append(ClinicalVerificationClaim(
@@ -625,7 +746,7 @@ class ClinicalVerificationEngine:
                 continue
 
             # B. Negation conflict check
-            is_neg_contra, neg_reason = cls.check_negation_conflict(entities, target_evidence)
+            is_neg_contra, neg_reason = cls.check_negation_conflict(entities, target_evidence, claim_text=clm.claim_text)
             if is_neg_contra:
                 contradictions_count += 1
                 verification_claims.append(ClinicalVerificationClaim(

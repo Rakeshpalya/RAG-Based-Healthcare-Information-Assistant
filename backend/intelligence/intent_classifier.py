@@ -81,16 +81,29 @@ LAB_RESULT_PATTERNS: List[Tuple[re.Pattern, str]] = [
 
 # Document Summary Patterns
 DOCUMENT_SUMMARY_PATTERNS: List[Tuple[re.Pattern, str]] = [
-    (re.compile(r"\b(?:summarize|give\s+me\s+a\s+summary|summary\s+of|clinical\s+summary|executive\s+summary)\b", re.I), "DOC_SUMMARY_VERB"),
-    (re.compile(r"\b(?:this\s+report|this\s+document|the\s+attached|uploaded\s+document|the\s+paper|the\s+study|the\s+records?)\b", re.I), "DOC_REFERENCE"),
-    (re.compile(r"\b(?:key\s+findings|main\s+conclusions|overview\s+of\s+this\s+document|tl;?dr\s+of)\b", re.I), "DOC_KEY_FINDINGS"),
+    (re.compile(r"\b(?:summarize|give\s+me\s+a\s+summary|summary\s+of|clinical\s+summary|executive\s+summary|document\s+summary)\b", re.I), "DOC_SUMMARY_VERB"),
+    (re.compile(r"\b(?:this\s+report|this\s+document|the\s+attached|uploaded\s+document|the\s+paper|the\s+study|the\s+records?|uploaded\s+documents?)\b", re.I), "DOC_REFERENCE"),
+    (re.compile(r"\b(?:key\s+findings|main\s+conclusions|overview\s+of\s+(?:this|the|uploaded)?\s*(?:document|report|file|records?|paper)?|tl;?dr\s+of|key\s+points?|main\s+points?)\b", re.I), "DOC_KEY_FINDINGS"),
+    (re.compile(r"\bwhat\s+is\s+(?:this|the)\s+[\w\s]{0,25}?(?:document|report|file|record|paper)\s+about\b", re.I), "DOC_ABOUT"),
+    (re.compile(r"\bwhat\s+does\s+(?:this|the|uploaded)?\s*[\w\s]{0,25}?(?:document|report|file|guide|paper)\s+(?:say|discuss|contain|cover|describe|include|address)\b", re.I), "DOC_DISCUSS"),
+    (re.compile(r"\bwhat\s+(?:are\s+the\s+)?(?:main|key|core|primary|major)?\s*(?:topics|points|subjects|conditions|diseases|findings|sections)\s*(?:are\s+)?(?:discussed|covered|mentioned|described|included|addressed)?\b", re.I), "DOC_TOPICS_COVERED"),
+    (re.compile(r"\bwhat\s+(?:information|data|details|topics?|conditions?)\s+(?:is|are)?\s*(?:not\s+(?:available|covered|in|found|mentioned|included|discussed)|missing|omitted|excluded|left\s+out)\b", re.I), "DOC_BOUNDARY_INQUIRY"),
+    (re.compile(r"\b(?:document\s+scope|scope\s+of\s+(?:the|this|uploaded)?\s*(?:document|report|file)?|what\s+is\s+(?:the\s+)?(?:document\s+)?scope)\b", re.I), "DOC_SCOPE"),
+    (re.compile(r"\b(?:what\s+sections|sections\s+of|structure\s+of|outline\s+of|table\s+of\s+contents\s+of)\s+(?:the|this|uploaded)?\s*(?:document|report|file)?\b", re.I), "DOC_SECTIONS"),
 ]
 
 # Document Comparison Patterns
 DOCUMENT_COMPARISON_PATTERNS: List[Tuple[re.Pattern, str]] = [
     (re.compile(r"\b(?:compare|comparison|contrast|difference\s+between)\s+(?:these|the\s+two|both|the\s+uploaded|multiple)\s*(?:documents?|reports?|studies?|files?|guidelines?)\b", re.I), "DOC_COMPARE_DIRECT"),
+    (re.compile(r"\b(?:compare|comparison|contrast)\b.*?\b(?:across|between|in)\b.*?\b(?:the\s+)?(?:uploaded\s+)?(?:documents?|reports?|studies?|files?|guidelines?)\b", re.I), "DOC_COMPARE_ACROSS_DOCS"),
+    (re.compile(r"\b(?:compare|comparison|contrast|compare\s+and\s+contrast)\b.*?\b(?:documents?|reports?|studies?|guidelines?|files?|records?)\b", re.I), "DOC_COMPARE_GENERAL"),
+    (re.compile(r"\b(?:compare|contrast)\s+(?:it|this|that)?\s*(?:with|to)\s+(?:the\s+)?(?:other|second|another)\s+(?:document|report|guideline|file)\b", re.I), "DOC_COMPARE_WITH_OTHER"),
     (re.compile(r"\bhow\s+do\s+(?:these\s+two|both\s+documents?|the\s+reports?)\s+(?:differ|compare)\b", re.I), "DOC_COMPARE_HOW"),
     (re.compile(r"\bcross-document\s+analysis\b", re.I), "DOC_COMPARE_CROSS"),
+    (re.compile(r"\b(?:difference|differences|differ\w*)\b.*?\b(?:between|across|in)\b.*?\b(?:the\s+)?(?:two|both|uploaded|different)\s+(?:documents?|reports?|files?|studies?|records?)\b", re.I), "DOC_COMPARE_BETWEEN_DOCS"),
+    (re.compile(r"\b(?:between|across)\s+(?:the\s+)?(?:two|both)\s+(?:uploaded\s+)?(?:documents?|reports?|files?|studies?|records?)\b", re.I), "DOC_COMPARE_TWO_DOCS"),
+    (re.compile(r"\b(?:compare|contrast)\b.*?\band\b", re.I), "DOC_COMPARE_X_AND_Y"),
+    (re.compile(r"\b(?:difference|differences)\s+between\b.*?\band\b", re.I), "DOC_DIFFERENCE_BETWEEN_X_AND_Y"),
 ]
 
 # Diagnosis Patterns
@@ -124,7 +137,8 @@ PREVENTION_PATTERNS: List[Tuple[re.Pattern, str]] = [
 # General Health & Pathophysiology Patterns
 GENERAL_HEALTH_PATTERNS: List[Tuple[re.Pattern, str]] = [
     (re.compile(r"\b(?:what\s+causes|cause\s+of|etiology\s+of|pathophysiology\s+of)\b", re.I), "GH_PATHOPHYSIOLOGY"),
-    (re.compile(r"\b(?:what\s+is|what\s+are|explain|overview\s+of|definition\s+of|how\s+does\s+the\s+[\w\s]{2,20}\s+work)\b", re.I), "GH_EXPLANATION"),
+    (re.compile(r"\b(?:what\s+is|what\s+are|explain|overview\s+of|definition\s+of)\s+(?:the\s+)?(?!ai\b|python\b|fastapi\b|machine\s+learning\b|rag\b|code\b|docker\b|sql\b)[\w\s]{2,30}\b", re.I), "GH_EXPLANATION"),
+    (re.compile(r"\b(?:how\s+does\s+the\s+[\w\s]{2,20}\s+work)\b", re.I), "GH_HOW_BODY_WORKS"),
     (re.compile(r"\b(?:anatomy\s+of|physiology\s+of|role\s+of\s+[\w\s]{2,20}\s+in\s+the\s+body)\b", re.I), "GH_ANATOMY"),
 ]
 
@@ -132,9 +146,31 @@ GENERAL_HEALTH_PATTERNS: List[Tuple[re.Pattern, str]] = [
 OUT_OF_SCOPE_PATTERNS: List[Tuple[re.Pattern, str]] = [
     (re.compile(r"\b(?:bake|recipe|cooking|chocolate\s+cake|roast|dinner\s+ideas)\b", re.I), "NON_MED_COOKING"),
     (re.compile(r"\b(?:capital\s+of|who\s+won|president\s+of|weather\s+in|stock\s+price|crypto|bitcoin|football|soccer|nba|world\s+cup)\b", re.I), "NON_MED_GENERAL_TRIVIA"),
-    (re.compile(r"\b(?:python\s+code|javascript|write\s+a\s+program|sql\s+query|debug\s+this\s+code|html|css)\b", re.I), "NON_MED_PROGRAMMING"),
+    (re.compile(r"\b(?:write\s+a\s+program|sql\s+query|debug\s+this\s+code|html|css)\b", re.I), "NON_MED_PROGRAMMING"),
     (re.compile(r"\b(?:fix\s+my\s+car|engine\s+oil|tire\s+pressure|brake\s+pads)\b", re.I), "NON_MED_AUTOMOTIVE"),
     (re.compile(r"\b(?:ignore\s+(?:all\s+)?previous\s+instructions|bypass\s+safety|jailbreak|pretend\s+you\s+are)\b", re.I), "PROMPT_INJECTION_OVERRIDE"),
+]
+
+# Pure Greeting Patterns (Phase 6.10)
+GREETING_PATTERNS: List[Tuple[re.Pattern, str]] = [
+    (re.compile(r"^(?:hi|hello|hey|good\s+morning|good\s+afternoon|good\s+evening|greetings|howdy)(?:[\s!,.]|$)", re.I), "GREETING_DIRECT"),
+    (re.compile(r"\b(?:hi|hello|hey|good\s+morning|good\s+afternoon|good\s+evening)\b", re.I), "GREETING_KEYWORD"),
+]
+
+# Conversational & Courtesy Patterns (Phase 6.10)
+CONVERSATIONAL_PATTERNS: List[Tuple[re.Pattern, str]] = [
+    (re.compile(r"\b(?:thank\s+you|thanks|thanks\s+a\s+lot|thank\s+you\s+so\s+much|thx|many\s+thanks|appreciate\s+it)\b", re.I), "COURTESY_THANKS"),
+    (re.compile(r"\b(?:goodbye|bye|bye\s+bye|see\s+you(?:\s+later)?|have\s+a\s+good\s+day|farewell)\b", re.I), "COURTESY_GOODBYE"),
+    (re.compile(r"\b(?:how\s+are\s+you|how\s+are\s+you\s+doing|how's\s+it\s+going|how\s+do\s+you\s+do)\b", re.I), "CONVERSATION_HOW_ARE_YOU"),
+    (re.compile(r"\b(?:who\s+are\s+you|what\s+is\s+your\s+name|what\s+can\s+you\s+do|how\s+can\s+you\s+help|what\s+do\s+you\s+do)\b", re.I), "CONVERSATION_IDENTITY"),
+]
+
+# Educational & Technology Patterns (Non-medical AI / Tech concepts) (Phase 6.10)
+EDUCATIONAL_TECH_PATTERNS: List[Tuple[re.Pattern, str]] = [
+    (re.compile(r"\b(?:explain\s+(?:ai|artificial\s+intelligence|machine\s+learning|ml|deep\s+learning|python|fastapi|rag|retrieval\s+augmented\s+generation|neural\s+networks?|llms?|large\s+language\s+models?|nlp|transformers?|vector\s+databases?|faiss))\b", re.I), "EDU_TECH_EXPLAIN"),
+    (re.compile(r"\bwhat\s+(?:is|are)\s+(?:ai|artificial\s+intelligence|machine\s+learning|ml|deep\s+learning|python|fastapi|rag|retrieval\s+augmented\s+generation|a\s+neural\s+network|an?\s+api|an?\s+llm|large\s+language\s+models?|vector\s+databases?|nlp)\b", re.I), "EDU_TECH_WHAT_IS"),
+    (re.compile(r"\b(?:tell\s+me\s+about\s+(?:ai|artificial\s+intelligence|machine\s+learning|python|fastapi|rag))\b", re.I), "EDU_TECH_TELL_ME"),
+    (re.compile(r"^(?:explain\s+ai|what\s+is\s+ai|what\s+is\s+machine\s+learning|what\s+is\s+python|explain\s+fastapi|what\s+is\s+rag|explain\s+rag|what\s+is\s+ml)[\s?.!]*$", re.I), "EDU_TECH_DIRECT"),
 ]
 
 
@@ -345,6 +381,69 @@ class ClinicalIntentClassifier:
                 recommended_top_k=0,
                 metadata={"reason": "Query is non-medical or an injection override attempt."}
             )
+
+        # -------------------------------------------------------------
+        # STEP 3.5: GREETINGS, CONVERSATION & GENERAL EDUCATIONAL QUERY HANDLING (Phase 6.10)
+        # -------------------------------------------------------------
+        # First, evaluate if query matches educational/technology patterns
+        for pattern, sig in EDUCATIONAL_TECH_PATTERNS:
+            if pattern.search(clean_text):
+                elapsed_ms = (time.perf_counter() - start_time) * 1000.0
+                return IntentClassificationResult(
+                    intent=ClinicalIntent.EDUCATIONAL_QUERY,
+                    confidence=0.98,
+                    matched_signals=[sig],
+                    requires_retrieval=False,
+                    requires_document_context=False,
+                    safety_priority=SafetyPriority.NONE,
+                    routing_strategy=ClinicalRoutingStrategy.EDUCATIONAL_RESPONSE,
+                    latency_ms=elapsed_ms,
+                    recommended_top_k=0,
+                    metadata={"reason": "Matched general educational / AI technology query pattern."}
+                )
+
+        # Check for pure greetings and ordinary conversation.
+        # Ensure we only route if the query doesn't contain substantive clinical inquiry tokens.
+        has_clinical_keywords = bool(re.search(
+            r'\b(?:symptoms?|disease|condition|diagnosis|treatment|medication|dosage|dose|drug|'
+            r'hypertension|diabetes|asthma|cancer|blood\s+pressure|heart|kidney|allergy|allergies|'
+            r'document|pdf|summarize|findings?|recommendations?|compare)\b',
+            clean_text,
+            re.I
+        ))
+
+        if not has_clinical_keywords:
+            for pattern, sig in GREETING_PATTERNS:
+                if pattern.search(clean_text) and len(clean_text.split()) <= 5:
+                    elapsed_ms = (time.perf_counter() - start_time) * 1000.0
+                    return IntentClassificationResult(
+                        intent=ClinicalIntent.GREETING,
+                        confidence=0.99,
+                        matched_signals=[sig],
+                        requires_retrieval=False,
+                        requires_document_context=False,
+                        safety_priority=SafetyPriority.NONE,
+                        routing_strategy=ClinicalRoutingStrategy.DIRECT_CONVERSATION,
+                        latency_ms=elapsed_ms,
+                        recommended_top_k=0,
+                        metadata={"reason": "Matched conversational greeting pattern. Zero retrieval."}
+                    )
+
+            for pattern, sig in CONVERSATIONAL_PATTERNS:
+                if pattern.search(clean_text) and len(clean_text.split()) <= 8:
+                    elapsed_ms = (time.perf_counter() - start_time) * 1000.0
+                    return IntentClassificationResult(
+                        intent=ClinicalIntent.GENERAL_CONVERSATION,
+                        confidence=0.99,
+                        matched_signals=[sig],
+                        requires_retrieval=False,
+                        requires_document_context=False,
+                        safety_priority=SafetyPriority.NONE,
+                        routing_strategy=ClinicalRoutingStrategy.DIRECT_CONVERSATION,
+                        latency_ms=elapsed_ms,
+                        recommended_top_k=0,
+                        metadata={"reason": "Matched conversational courtesy or status pattern. Zero retrieval."}
+                    )
 
         # -------------------------------------------------------------
         # STEP 4: MULTI-INTENT SIGNAL SCORING & DISCRIMINATION

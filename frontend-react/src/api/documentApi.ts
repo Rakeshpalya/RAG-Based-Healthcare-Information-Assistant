@@ -1,6 +1,32 @@
 import { apiClient } from './client';
 import { DocumentRecord, DocumentUploadResponse } from '../types';
 
+export function normalizeDocumentList(data: unknown): DocumentRecord[] {
+  if (Array.isArray(data)) {
+    return data.filter(
+      (item): item is DocumentRecord =>
+        Boolean(item && typeof item === 'object' && ('id' in item || 'filename' in item))
+    );
+  }
+
+  if (data && typeof data === 'object') {
+    const candidate =
+      (data as Record<string, unknown>).documents ??
+      (data as Record<string, unknown>).items ??
+      (data as Record<string, unknown>).data ??
+      (data as Record<string, unknown>).results;
+
+    if (Array.isArray(candidate)) {
+      return candidate.filter(
+        (item): item is DocumentRecord =>
+          Boolean(item && typeof item === 'object' && ('id' in item || 'filename' in item))
+      );
+    }
+  }
+
+  return [];
+}
+
 export const documentApi = {
   uploadDocument: async (
     file: File,
@@ -23,10 +49,10 @@ export const documentApi = {
   },
 
   listDocuments: async (skip: number = 0, limit: number = 100): Promise<DocumentRecord[]> => {
-    const response = await apiClient.get<DocumentRecord[]>('/documents', {
+    const response = await apiClient.get<unknown>('/documents', {
       params: { skip, limit },
     });
-    return response.data;
+    return normalizeDocumentList(response.data);
   },
 
   getDocument: async (documentId: number): Promise<DocumentRecord> => {

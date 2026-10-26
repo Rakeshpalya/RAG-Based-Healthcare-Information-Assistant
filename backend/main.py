@@ -265,6 +265,13 @@ async def health_check():
     except Exception:
         pass
 
+    model_loaded = False
+    try:
+        from backend.services.embedding_service import EmbeddingService
+        model_loaded = EmbeddingService.is_model_loaded()
+    except Exception:
+        pass
+
     overall_status = "healthy"
     if any(s == "degraded" for s in [vector_status, embedding_status, safety_status]):
         overall_status = "degraded"
@@ -275,6 +282,7 @@ async def health_check():
         "environment": ENVIRONMENT,
         "vector_store": vector_status,
         "embedding_service": embedding_status,
+        "embedding_model_loaded": model_loaded,
         "safety_engine": safety_status,
         "database": db_status,
         "llm_config": llm_status,

@@ -33,6 +33,11 @@ class ClinicalIntent(str, Enum):
     DOCUMENT_SUMMARY = "DOCUMENT_SUMMARY"
     DOCUMENT_COMPARISON = "DOCUMENT_COMPARISON"
 
+    # Conversational & Educational Boundary Intents (Phase 6.10)
+    GREETING = "GREETING"
+    GENERAL_CONVERSATION = "GENERAL_CONVERSATION"
+    EDUCATIONAL_QUERY = "EDUCATIONAL_QUERY"
+
     # Non-Clinical / Boundary Intents
     OUT_OF_SCOPE = "OUT_OF_SCOPE"
     UNCERTAIN = "UNCERTAIN"
@@ -68,6 +73,8 @@ class ClinicalRoutingStrategy(str, Enum):
     DOCUMENT_COMPARISON_RAG = "document_comparison_rag"
 
     # Fallback / Boundary Strategies
+    DIRECT_CONVERSATION = "direct_conversation"
+    EDUCATIONAL_RESPONSE = "educational_response"
     OUT_OF_SCOPE_RESPONSE = "out_of_scope_response"
     STANDARD_RAG = "standard_rag"
 

@@ -47,8 +47,14 @@ HEALTHCARE_SYSTEM_INSTRUCTIONS = (
     "   - Do NOT infer, classify, or derive a medical conclusion from separate pieces of context.\n"
     "   - Do NOT turn general lifestyle recommendations into a definitive medical classification unless the document explicitly makes that connection.\n"
     "   - If the user asks which risk factors can be modified (or which are modifiable), and the retrieved context lists risk factors and separately describes lifestyle measures, but does NOT explicitly identify which risk factors are modifiable: return a grounded limitation citing the document, such as: 'The document lists several hypertension risk factors and separately describes lifestyle measures, but it does not explicitly identify which specific risk factors are modifiable [Source 1].' Do NOT declare that certain risk factors are modifiable when the document does not explicitly make that classification.\n\n"
-    "8. DOCUMENT BOUNDARIES & EXPLICIT UNSUPPORTED TOPICS:\n"
+    "8. DOCUMENT BOUNDARIES, SCOPE & EXPLICIT EXCLUSIONS VS UNMENTIONED TOPICS:\n"
+    "   - When answering questions about what the document explicitly includes or excludes, rely strictly on the document's actual text.\n"
     "   - If the retrieved context contains an explicit testing boundary, exclusion, or scope limitation stating that certain topics (such as malaria, tuberculosis, or cancer) are not covered or should be treated as unsupported: state clearly that according to the provided document, the topic is not covered and that questions about it should be treated as unsupported by the document, and cite the source (e.g. [Source 1]).\n"
+    "   - Do NOT infer or claim that a topic is an 'explicit exclusion' merely because it was not retrieved or absent from the passage. If a topic is unmentioned in the text, clearly state that the document does not contain information on that topic, rather than claiming it was explicitly excluded.\n\n"
+    "9. SYMPTOMS VS DIAGNOSIS AND TREATMENT:\n"
+    "   - Distinguish strictly between documented symptoms and a formal medical diagnosis or prescribed treatment.\n"
+    "   - If the retrieved evidence only documents symptoms (such as wheezing, coughing, shortness of breath) and does NOT explicitly state that a formal diagnosis was established or that a treatment or medication (such as an inhaler) was prescribed, you MUST NOT claim that a diagnosis was made or that an inhaler or treatment was prescribed.\n"
+    "   - State only that the document notes symptoms, and clarify that no diagnosis or prescription is documented.\n"
 )
 
 MEDICAL_DISCLAIMER = (

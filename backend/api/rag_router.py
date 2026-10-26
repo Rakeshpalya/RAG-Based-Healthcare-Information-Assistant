@@ -33,19 +33,10 @@ def get_rag_service() -> RAGService:
 def _resolve_active_rag_service(user_id: Optional[int]) -> RAGService:
     """
     Resolves the appropriate RAGService instance.
-    For authenticated queries (user_id is not None), prioritizes the shared persistent
-    vector store holding uploaded user documents. Falls back to router singleton.
+    Returns the shared RAGService singleton, which is initialized with the shared vector store.
+    User isolation is handled per-query via user_id filtering.
     """
-    rag_service = get_rag_service()
-    if user_id is not None:
-        try:
-            from backend.services.vector_store_service import get_vector_store_service
-            shared_store = get_vector_store_service()
-            if shared_store.count() > 0:
-                return RAGService(vector_store=shared_store)
-        except Exception as exc:
-            logger.warning("Failed to resolve shared vector store: %s", type(exc).__name__)
-    return rag_service
+    return get_rag_service()
 
 
 class RAGRetrieveRequest(BaseModel):
@@ -146,6 +137,10 @@ class RAGQueryRequest(BaseModel):
         default=None,
         description="Optional list of recent chat messages for follow-up reference resolution."
     )
+    document_id: Optional[str] = Field(
+        default=None,
+        description="Optional document ID for scoped retrieval."
+    )
 
     model_config = ConfigDict(extra="forbid")
 
@@ -206,7 +201,8 @@ async def query_rag(
             similarity_threshold=request.similarity_threshold,
             user_id=user_id,
             conversation_history=request.conversation_history,
-            request_id=req_id
+            request_id=req_id,
+            document_id=request.document_id
         )
         req_id = result.get("request_id") or req_id
 
@@ -298,7 +294,8 @@ async def stream_rag_query(
                 similarity_threshold=request.similarity_threshold,
                 user_id=user_id,
                 conversation_history=request.conversation_history,
-                request_id=req_id
+                request_id=req_id,
+                document_id=request.document_id
             ):
                 payload_json = json.dumps(event_payload, ensure_ascii=False)
                 yield f"event: {event_type}\ndata: {payload_json}\n\n"

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { HealthLogo } from '../components/common/HealthLogo';
 import { Lock, Mail, AlertCircle, Loader2, LogIn } from 'lucide-react';
 
 export const LoginPage: React.FC = () => {
@@ -39,9 +40,7 @@ export const LoginPage: React.FC = () => {
     <div className="min-h-[calc(100vh-8rem)] flex items-center justify-center px-4 py-12">
       <div className="max-w-md w-full bg-white rounded-2xl border border-slate-200 p-8 shadow-sm space-y-6">
         <div className="text-center space-y-2">
-          <div className="w-12 h-12 rounded-xl bg-sky-600 text-white mx-auto flex items-center justify-center font-bold text-xl shadow-xs">
-            🩺
-          </div>
+          <HealthLogo size="lg" className="mx-auto" />
           <h2 className="text-2xl font-bold text-slate-900 tracking-tight">Sign in to HealthAI</h2>
           <p className="text-xs text-slate-500">
             Access evidence-grounded clinical decision support and document search

@@ -148,14 +148,14 @@ class ClinicalCitationAttributionEngine:
 
         cleaned = text
 
-        # Strip explicit spoofed tags (e.g. [Source OVERRIDE] -> "")
+        # Strip explicit spoofed tags (e.g. [Source OVERRIDE] -> " ")
         if spoofed_tags:
             for s_tag in spoofed_tags:
-                cleaned = cleaned.replace(s_tag, "")
+                cleaned = cleaned.replace(s_tag, " ")
 
         # Also strip any detected spoofed brackets
         for s_match in cls.detect_spoofed_citations(cleaned):
-            cleaned = cleaned.replace(s_match, "")
+            cleaned = cleaned.replace(s_match, " ")
 
         # Strip numeric out-of-bounds citations
         invalid_set = set(int(c) for c in (invalid_citations or []))
@@ -169,7 +169,7 @@ class ClinicalCitationAttributionEngine:
                         continue
                 kept = [n for n in numbers if n not in invalid_set]
                 if not kept:
-                    return ""
+                    return " "
                 if kept == numbers:
                     return match.group(0)
                 if len(kept) == 1:
@@ -208,14 +208,41 @@ class ClinicalCitationAttributionEngine:
             "medical disclaimer",
             "always consult a qualified",
             "always consult your doctor",
+            "consult a qualified",
+            "consult a licensed",
             "experiencing a medical emergency",
             "relevant medical information could not be found",
             "to prevent unsupported healthcare answers",
             "the available documents do not contain",
             "not enough information",
+            "could not be found in the available reference documents",
             "generation was halted",
-            "please consult clinical guidelines"
+            "please consult clinical guidelines",
+            "informational research assistant",
+            "not a physician",
+            "not a doctor",
+            "personalized clinical advice",
+            "personalized medical advice",
+            "personalized clinical guidance",
+            "for clinical decisions, please consult",
+            "please consult a qualified",
+            "as an ai",
         ]):
+            return True
+        # Asterisk-wrapped disclaimers: *Note: ...*
+        if re.search(r'\b(?:note|disclaimer)\b.*?\b(?:physician|doctor|healthcare professional|medical advice|clinical advice)\b', lower):
+            return True
+        # Explicit absence of evidence / scope limitation statements (Requirement 6.7 & 6.10)
+        if re.search(
+            r'\b(?:do(?:es)?\s+not\s+(?:explicitly\s+)?(?:state|contain|mention|identify|detail|list|specify|provide|describe)|'
+            r'not\s+(?:explicitly\s+)?(?:stated|mentioned|found|provided|detailed|covered|identified)\s+in|'
+            r'the\s+(?:provided|available|uploaded)\s+documents?\s+do\s+not|'
+            r'the\s+(?:provided|available|uploaded)\s+text\s+does\s+not|'
+            r'not\s+contain\s+information\s+(?:detailing|about|regarding)|'
+            r'does\s+not\s+provide\s+specific|'
+            r'without\s+a\s+numbered\s+recommendation)\b',
+            lower
+        ):
             return True
         return False
 
@@ -223,7 +250,8 @@ class ClinicalCitationAttributionEngine:
     def classify_claim_type(cls, text: str) -> ClinicalClaimType:
         """Classifies a claim into a semantic clinical assertion type."""
         if cls.is_structural_or_meta(text):
-            if any(p in text.lower() for p in ("disclaimer", "not enough information", "could not be found")):
+            lower = text.lower()
+            if any(p in lower for p in ("disclaimer", "not enough information", "could not be found", "not a physician", "not a doctor", "consult a qualified")):
                 return ClinicalClaimType.LIMITATION_OR_DISCLAIMER
             return ClinicalClaimType.STRUCTURAL
 

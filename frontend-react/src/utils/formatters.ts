@@ -39,3 +39,34 @@ export function formatRelevanceScore(score?: number): string {
   const pct = Math.round(Math.min(Math.max(score, 0), 1) * 100);
   return `${pct}% relevance`;
 }
+
+export function formatAssistantText(text?: string | null): string {
+  if (!text) return '';
+  let cleaned = text;
+
+  // 1. Spacing around citations: normalize [Source1] -> [Source 1], ensure spaces around brackets
+  cleaned = cleaned.replace(/\[Source(\d+)\]/g, '[Source $1]');
+  cleaned = cleaned.replace(/\bSource(\d+)\b/g, 'Source $1');
+  cleaned = cleaned.replace(/([A-Za-z0-9])(\[(?:Source\s+\d+|[Ss]ources?\b))/g, '$1 $2');
+  cleaned = cleaned.replace(/(\[(?:Source\s+\d+|[Ss]ources?\b[^\]]*)\])([.,;:!?])?([A-Za-z0-9])/g, '$1$2 $3');
+
+  // 2. Conjoined words and punctuation fixes
+  cleaned = cleaned.replace(/([a-z0-9\]\)])([.!?])([A-Z])/g, '$1$2 $3');
+  cleaned = cleaned.replace(/([a-z0-9\]\)])([,;:])([A-Za-z])/g, '$1$2 $3');
+  cleaned = cleaned.replace(/\bExcessbody\b/g, 'Excess body');
+  cleaned = cleaned.replace(/\bExcessweight\b/g, 'Excess weight');
+
+  // 3. Ensure bullet points and numbered list items start on newlines (preserving bold **)
+  cleaned = cleaned.replace(/([.:;!?\n])\s*([*\-•])(?!\*)\s*/g, '$1\n$2 ');
+  cleaned = cleaned.replace(/([.:;!?\n])\s*(\d+[\.\)])\s*/g, '$1\n$2 ');
+  cleaned = cleaned.replace(/([^\n\s])\s*([•])\s*/g, '$1\n$2 ');
+  cleaned = cleaned.replace(/([^\n\s])\s+([*\-])(?!\*)\s*([A-Za-z0-9])/g, '$1\n$2 $3');
+  cleaned = cleaned.replace(/([a-z0-9])\s*([*\-])(?!\*)\s*([A-Za-z0-9]+)/g, '$1\n$2 $3');
+
+  // 4. Clean empty bullet lines
+  cleaned = cleaned.replace(/^\s*[-*•](?:\s+[-*•])*\s*$/gm, '');
+  cleaned = cleaned.replace(/^\s*[-*•\s]+$/gm, '');
+
+  return cleaned.trim();
+}
+

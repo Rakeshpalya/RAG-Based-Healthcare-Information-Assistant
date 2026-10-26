@@ -280,6 +280,7 @@ class ClinicalAnswerSynthesisEngine:
             "DOCUMENT_COMPARISON": (
                 "- Compare findings between sources directly using citation tags [Source 1], [Source 2].\n"
                 "- Note points of concordance and points of divergence neutrally.\n"
+                "- If only one source or document is present in the context, explicitly state that comparative evidence is limited to that single document and note that the other document or condition is not available in the provided context, rather than asserting unsupported comparative claims.\n"
                 "- Provide a balanced conclusion without taking unwarranted sides."
             ),
             "TREATMENT_QUERY": (

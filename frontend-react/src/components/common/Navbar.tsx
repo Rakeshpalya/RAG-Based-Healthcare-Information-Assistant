@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { HealthStatusBadge } from './HealthStatusBadge';
+import { HealthLogo } from './HealthLogo';
 import {
   MessageSquare,
   FileText,
@@ -40,9 +41,7 @@ export const Navbar: React.FC = () => {
           {/* Logo & Brand */}
           <div className="flex items-center gap-6">
             <Link to={isAuthenticated ? '/dashboard' : '/'} className="flex items-center gap-2.5">
-              <div className="w-9 h-9 rounded-lg bg-sky-600 text-white flex items-center justify-center font-bold text-lg shadow-sm">
-                🩺
-              </div>
+              <HealthLogo size="md" />
               <div>
                 <span className="font-semibold text-slate-900 tracking-tight text-lg">HealthAI</span>
                 <span className="text-xs text-sky-600 font-medium ml-1.5 px-1.5 py-0.5 bg-sky-50 rounded">Assistant</span>

@@ -5,6 +5,7 @@ import { HealthProvider } from './context/HealthContext';
 import { Navbar } from './components/common/Navbar';
 import { MedicalDisclaimer } from './components/common/MedicalDisclaimer';
 import { ProtectedRoute } from './components/common/ProtectedRoute';
+import { FloatingChatbot } from './components/chat/FloatingChatbot';
 
 import { LandingPage } from './pages/LandingPage';
 import { LoginPage } from './pages/LoginPage';
@@ -69,6 +70,9 @@ export const App: React.FC = () => {
                 <Route path="*" element={<Navigate to="/" replace />} />
               </Routes>
             </main>
+
+            {/* Independent Floating Medical Chatbot (Bottom-Right) */}
+            <FloatingChatbot />
 
             {/* Persistent Clinical Disclaimer */}
             <MedicalDisclaimer />

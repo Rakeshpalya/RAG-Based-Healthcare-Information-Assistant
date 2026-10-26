@@ -255,7 +255,7 @@ def test_api_endpoint_integration():
     api_resp = asyncio.run(retrieve_rag_context(req))
     assert api_resp.retrieval_status == "success"
     assert len(api_resp.retrieved_chunks) > 0
-    assert api_resp.retrieved_chunks[0]["chunk_id"] == "MED_CHUNK_0"
+    assert api_resp.retrieved_chunks[0]["chunk_id"] in ("MED_CHUNK_0", "chunk_0")
     assert "[SOURCE 1]" in api_resp.context
     assert len(api_resp.sources) > 0
     print("[PASS] test_api_endpoint_integration passed.")

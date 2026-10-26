@@ -1,43 +1,100 @@
 import time
-from typing import List, Dict, Any, Union, Optional
-from sentence_transformers import SentenceTransformer
+import os
+import logging
+import threading
+from typing import List, Dict, Any, Union, Optional, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from sentence_transformers import SentenceTransformer
+
+logger = logging.getLogger(__name__)
 
 
 class EmbeddingService:
     """
     Singleton service for generating local dense text embeddings
     using Hugging Face Sentence Transformers (all-MiniLM-L6-v2).
+
+    Memory Optimization (Render 512MB RAM):
+    SentenceTransformer and PyTorch are lazy-loaded only when embedding
+    generation (embed_query or embed_chunks) is actually invoked.
+    Startup and lightweight health checks query the known embedding dimension
+    without allocating ~400+ MB of PyTorch and Transformer weights into RAM.
     """
 
     MODEL_NAME = "sentence-transformers/all-MiniLM-L6-v2"
-    _model_instance: Optional[SentenceTransformer] = None
+    EMBEDDING_DIMENSION = 384
+    _model_instance: Optional[Any] = None
+    _lock = threading.Lock()
 
     @classmethod
-    def get_model(cls) -> SentenceTransformer:
+    def get_model(cls) -> Any:
         """
         Lazy-loads and caches the SentenceTransformer model instance (Singleton).
-        Ensures the model is loaded only once into memory.
+        Ensures the model and heavy PyTorch/Transformer dependencies are loaded
+        only once into memory and ONLY when an actual embedding generation request arrives.
+        Thread-safe double-checked locking prevents concurrent duplicate loading.
         """
         if cls._model_instance is None:
-            print(f"[INFO] Loading SentenceTransformer model '{cls.MODEL_NAME}' into memory...")
-            start_time = time.perf_counter()
-            try:
-                cls._model_instance = SentenceTransformer(cls.MODEL_NAME, local_files_only=True)
-            except Exception:
-                cls._model_instance = SentenceTransformer(cls.MODEL_NAME)
-            elapsed = time.perf_counter() - start_time
-            print(f"[INFO] Model '{cls.MODEL_NAME}' loaded successfully in {elapsed:.3f} seconds.")
+            with cls._lock:
+                if cls._model_instance is None:
+                    import gc
+
+                    # Optimize PyTorch CPU execution and thread allocations for low-memory environments
+                    os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
+                    os.environ.setdefault("OMP_NUM_THREADS", "1")
+                    os.environ.setdefault("MKL_NUM_THREADS", "1")
+                    try:
+                        import torch
+                        try:
+                            torch.set_num_threads(1)
+                        except Exception:
+                            pass
+                        if hasattr(torch, "set_num_interop_threads"):
+                            try:
+                                torch.set_num_interop_threads(1)
+                            except Exception:
+                                pass
+                    except Exception:
+                        pass
+
+                    try:
+                        from sentence_transformers import SentenceTransformer
+
+                        logger.info("Lazy-loading SentenceTransformer model '%s' into memory...", cls.MODEL_NAME)
+                        start_time = time.perf_counter()
+                        try:
+                            cls._model_instance = SentenceTransformer(cls.MODEL_NAME, local_files_only=True)
+                        except Exception:
+                            cls._model_instance = SentenceTransformer(cls.MODEL_NAME)
+                        elapsed = time.perf_counter() - start_time
+                        logger.info("Model '%s' loaded successfully in %.3f seconds.", cls.MODEL_NAME, elapsed)
+                        gc.collect()
+                    except Exception as exc:
+                        cls._model_instance = None
+                        logger.error("Failed to initialize embedding model '%s': %s", cls.MODEL_NAME, exc)
+                        raise RuntimeError(
+                            f"Embedding model initialization failed for '{cls.MODEL_NAME}': {exc}"
+                        ) from exc
         return cls._model_instance
+
+    @classmethod
+    def is_model_loaded(cls) -> bool:
+        """Checks if the SentenceTransformer model is currently loaded in memory."""
+        return cls._model_instance is not None
 
     @classmethod
     def get_embedding_dimension(cls) -> int:
         """
-        Returns the vector dimension of the loaded embedding model (384 for all-MiniLM-L6-v2).
+        Returns the vector dimension of the embedding model (384 for all-MiniLM-L6-v2).
+        If the model is already loaded, queries the model instance; otherwise returns
+        the known static embedding dimension without incurring a 400+ MB model load.
         """
-        model = cls.get_model()
-        if hasattr(model, "get_embedding_dimension"):
-            return model.get_embedding_dimension()
-        return model.get_sentence_embedding_dimension()
+        if cls._model_instance is not None:
+            if hasattr(cls._model_instance, "get_embedding_dimension"):
+                return cls._model_instance.get_embedding_dimension()
+            return cls._model_instance.get_sentence_embedding_dimension()
+        return cls.EMBEDDING_DIMENSION
 
 
     @classmethod

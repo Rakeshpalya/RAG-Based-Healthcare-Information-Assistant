@@ -64,7 +64,10 @@ class RAGService:
             default_top_k: Default top_k results to retrieve (falls back to RAG_TOP_K env or 5).
             default_similarity_threshold: Minimum cosine similarity threshold (falls back to RAG_SIMILARITY_THRESHOLD env or 0.25).
         """
-        self.vector_store = vector_store or VectorStoreService()
+        if vector_store is not None:
+            self.vector_store = vector_store
+        else:
+            self.vector_store = get_vector_store_service()
 
         # Configurable top_k from environment or default
         env_top_k = os.getenv("RAG_TOP_K")
@@ -592,11 +595,17 @@ class RAGService:
         # Guard against weak unanchored queries:
         # If the query contains no clinical condition anchor, no patient name, and top_score is below cutoff,
         # it represents low-similarity nearest-neighbor noise.
+        # Exclude explicit document overview / summary requests from entity anchor pruning.
+        is_summary_query = bool(re.search(
+            r'\b(?:summar(?:y|ize)|overview|synthes(?:is|ize)|compar(?:e|ison|ative)|contrast|difference\s+between|across\s+(?:the\s+)?documents?|main\s+points?|key\s+findings?|recommendations?|abstract|introduction|what\s+is\s+this\s+document\s+about|what\s+does\s+the\s+(?:uploaded\s+)?document\s+(?:say|discuss|contain|cover|describe)|what\s+(?:topics|conditions|diseases)\s+are\s+(?:discussed|covered|mentioned|described))\b',
+            q_clean,
+            re.IGNORECASE
+        ))
         has_primary_subject = bool(MedicalQueryExpander.extract_primary_subject(q_clean))
         has_patient_name = bool(re.search(r'\b(john\s+doe|alice|bob|patient\s+[a-z]+)\b', q_clean, re.IGNORECASE))
         has_facet = bool(re.search(r'\b(?:risk\s+factors?|lifestyle|complications?|medications?|treatment|diet|monitoring)\b', q_clean, re.IGNORECASE))
         min_unanchored_threshold = 0.30 if has_facet else 0.35
-        if not has_primary_subject and not has_patient_name and not scoped_words and top_score < min_unanchored_threshold:
+        if not is_summary_query and not has_primary_subject and not has_patient_name and not scoped_words and top_score < min_unanchored_threshold:
             return []
 
         survived: List[Dict[str, Any]] = []
@@ -613,6 +622,7 @@ class RAGService:
 
             is_same_top_doc = bool(top_doc_id and c_doc_id and c_doc_id == top_doc_id and not scoped_words)
             is_rel = (
+                is_summary_query or
                 is_same_top_doc or
                 cls._is_chunk_relevant_to_query(q_clean, chunk) or
                 any(cls._is_chunk_relevant_to_query(sq, chunk) for sq in sub_queries)
@@ -750,6 +760,86 @@ class RAGService:
             return scoped
         return None
 
+    @staticmethod
+    def generate_greeting_response(question: str) -> str:
+        """Generates friendly, lightweight conversational responses without retrieval or LLM load."""
+        q = (question or "").strip().lower()
+        if re.search(r'\b(?:thank\s+you|thanks|thx|appreciate)\b', q):
+            return (
+                "You are very welcome! If you have additional clinical questions or need further "
+                "clarification from your healthcare documents, please let me know. Stay healthy!"
+            )
+        if re.search(r'\b(?:goodbye|bye|see\s+you|farewell|have\s+a\s+good\s+day)\b', q):
+            return (
+                "Goodbye! Take care, and feel free to return whenever you have questions about your clinical documents."
+            )
+        if re.search(r'\b(?:how\s+are\s+you|how\s+are\s+you\s+doing|how\'s\s+it\s+going)\b', q):
+            return (
+                "I am operating well and ready to assist you with your healthcare documents and medical inquiries. "
+                "How can I assist you today?"
+            )
+        if re.search(r'\b(?:who\s+are\s+you|what\s+can\s+you\s+do|what\s+do\s+you\s+do)\b', q):
+            return (
+                "I am the HealthAI medical assistant. I can help analyze your healthcare documents, summarize clinical findings, "
+                "verify medical evidence, and answer health questions based on your authorized records. How can I help you today?"
+            )
+        return (
+            "Hello! I am your HealthAI assistant. I can help analyze your healthcare documents, summarize clinical findings, "
+            "and answer health questions based on your authorized records. How can I assist you today?"
+        )
+
+    @staticmethod
+    def generate_educational_response(question: str) -> str:
+        """Generates labeled general educational/AI technical responses without document retrieval."""
+        q = (question or "").strip().lower()
+        prefix = "**[General Educational Information - Not from uploaded clinical documents]**\n\n"
+
+        if re.search(r'\b(?:artificial\s+intelligence|\bai\b)', q):
+            return (
+                prefix +
+                "Artificial Intelligence (AI) refers to the simulation of human intelligence in computers and algorithms "
+                "designed to reason, learn patterns, and solve complex problems. In healthcare, AI is applied to medical image analysis, "
+                "clinical decision support, diagnostic risk modeling, and retrieval-augmented document assistants."
+            )
+        if re.search(r'\b(?:machine\s+learning|\bml\b)', q):
+            return (
+                prefix +
+                "Machine Learning (ML) is a branch of artificial intelligence focused on building algorithms that learn patterns "
+                "and relationships directly from empirical data. Instead of following rigid static rules, machine learning models "
+                "improve their predictive accuracy through training on datasets."
+            )
+        if re.search(r'\bpython\b', q):
+            return (
+                prefix +
+                "Python is a high-level, interpreted programming language known for its readable syntax, versatility, and rich scientific "
+                "ecosystem. It is the leading language for artificial intelligence, data science, bio-computational modeling, and modern web APIs."
+            )
+        if re.search(r'\bfastapi\b', q):
+            return (
+                prefix +
+                "FastAPI is a modern, high-performance web framework for constructing APIs with Python 3.8+ based on standard Python type hints "
+                "and ASGI. It provides automatic OpenAPI documentation, asynchronous request handling with high concurrency, and rapid JSON serialization."
+            )
+        if re.search(r'\b(?:retrieval\s+augmented\s+generation|\brag\b)', q):
+            return (
+                prefix +
+                "Retrieval-Augmented Generation (RAG) is an AI architecture that enhances language models by retrieving relevant factual passages "
+                "from an external knowledge base or document vector store before generating an answer. This grounds responses in verified source "
+                "material and significantly reduces model hallucinations."
+            )
+        if re.search(r'\b(?:neural\s+network|deep\s+learning)\b', q):
+            return (
+                prefix +
+                "Deep Learning is a subset of machine learning based on artificial neural networks with multiple layers (deep architectures). "
+                "These networks can learn hierarchical representations of complex data such as radiology scans, medical pathology images, and natural language."
+            )
+
+        return (
+            prefix +
+            f"This is a general educational inquiry regarding '{question}'. While I am a specialized medical assistant designed to analyze "
+            "clinical records, general non-medical technical concepts are answered for educational context and are not derived from your uploaded healthcare documents."
+        )
+
     @classmethod
     def resolve_followup_query(
         cls,
@@ -838,9 +928,10 @@ class RAGService:
         max_score = max(scores) if scores else 0.0
 
         # 1. Similarity Threshold Cutoff
-        effective_threshold = float(similarity_threshold)
         if query_plan is not None and hasattr(query_plan, "similarity_threshold"):
-            effective_threshold = max(effective_threshold, float(query_plan.similarity_threshold))
+            effective_threshold = float(query_plan.similarity_threshold)
+        else:
+            effective_threshold = float(similarity_threshold)
 
         if max_score < effective_threshold:
             return False, f"max_similarity_score_{max_score:.4f}_below_threshold_{effective_threshold:.4f}"
@@ -967,24 +1058,27 @@ class RAGService:
                 r'\b(antihypertensive\s+(?:agent|medication|drug)|inhaler\s+treatment|dosage\s+of|mg\s+daily)\b'
             ]
             has_med_info = any(re.search(pat, combined_text) for pat in med_indicators)
-            if not has_med_info:
+            has_lifestyle_alt = any(re.search(pat, combined_text) for pat in [
+                r'\b(lifestyle|physical\s+activity|exercise|diet|sodium|weight)\b'
+            ])
+            # If compound inquiry (mixed lifestyle+med), allow partial evidence if lifestyle is present
+            if not has_med_info and not (intent_res.is_mixed and has_lifestyle_alt):
                 return False, "missing_medication_recommendations_in_context"
 
         # 3B. Sub-Topic Intent: Lifestyle / Non-Pharmacological Measures Check
-        # If the user asks for lifestyle changes, non-medication measures, or mixed interventions,
-        # the context must contain relevant lifestyle recommendations.
         if intent_res.is_lifestyle or intent_res.is_mixed:
             lifestyle_indicators = [
                 r'\b(lifestyle|physical\s+activity|exercise|aerobic|diet|dietary|healthy\s+weight|weight\s+(?:loss|reduction|management)|sodium|salt|tobacco|smoking|alcohol|sleep|rest)\b',
                 r'\b(non[- ]pharmacologic(?:al)?|non[- ]medication|non[- ]drug)\b'
             ]
             has_lifestyle_info = any(re.search(pat, combined_text) for pat in lifestyle_indicators)
-            if not has_lifestyle_info:
+            has_med_alt = any(re.search(pat, combined_text) for pat in [
+                r'\b(prescribed|medication|drug|therapy|amlodipine|metformin|lisinopril)\b'
+            ])
+            if not has_lifestyle_info and not (intent_res.is_mixed and has_med_alt):
                 return False, "missing_lifestyle_recommendations_in_context"
 
         # 3C. Specific Medication Check:
-        # If the user names a specific drug or drug class in the focused query,
-        # the context must actually contain that specific medication (unless explicitly asking to avoid it).
         specific_meds = [
             "insulin", "metformin", "lisinopril", "amlodipine", "losartan", "metoprolol",
             "hydrochlorothiazide", "furosemide", "albuterol", "fluticasone", "statin", "atorvastatin"
@@ -1004,7 +1098,9 @@ class RAGService:
         is_asking_surgery = bool(re.search(r'\b(surgery|surgical\s+procedure|surgical\s+resection|craniotomy|operation)\b', q_lower))
         if is_asking_surgery:
             has_surgery_info = bool(re.search(r'\b(surgery|surgical|operation|resection|craniotomy|operative)\b', combined_text))
-            if not has_surgery_info:
+            has_other_aspect = any(re.search(pat, combined_text) for pat in [r'\b(medication|treatment|therapy|management|diagnosis)\b'])
+            is_compound = bool(re.search(r'\b(?:and|or|as\s+well\s+as|treatment|options?)\b', q_lower))
+            if not has_surgery_info and not (is_compound and has_other_aspect):
                 return False, "missing_surgical_information_in_context"
 
         # 5. Sub-Topic Intent: Complications / Long-Term Consequences
@@ -1016,7 +1112,12 @@ class RAGService:
                 r'\b(complications?|stroke|heart\s+attack|myocardial\s+infarction|kidney\s+failure|renal\s+failure|retinopathy|neuropathy|nephropathy|organ\s+damage|cardiovascular\s+events?|heart\s+disease|kidney\s+problems?|damage\s+to\s+blood\s+vessels)\b'
             ]
             has_comp_info = any(re.search(pat, combined_text) for pat in complication_indicators)
-            if not has_comp_info:
+            has_sym_or_cause = any(re.search(pat, combined_text) for pat in [
+                r'\b(symptoms?|signs?|headache|dizziness|risk\s+factors?|lifestyle|blood\s+pressure|cause|condition|definition)\b'
+            ])
+            is_compound = bool(re.search(r'\b(?:and|as\s+well\s+as|along\s+with|symptoms?|causes?|risk\s+factors?)\b', q_lower))
+            # If compound inquiry (e.g. "symptoms and complications"), allow if symptoms/condition are present
+            if not has_comp_info and not (is_compound and has_sym_or_cause):
                 return False, "missing_complications_information_in_context"
 
         # 5B. Sub-Topic Intent: Follow-Up / Monitoring Plan
@@ -1028,36 +1129,44 @@ class RAGService:
                 r'\b(follow-up|follow\s+up|monitoring\s+plan|subsequent\s+visit|next\s+visit|re-evaluated|recheck|scheduled\s+in|return\s+in)\b'
             ]
             has_followup_info = any(re.search(pat, combined_text) for pat in followup_indicators)
-            if not has_followup_info:
+            has_treatment_info = any(re.search(pat, combined_text) for pat in [r'\b(treatment|medication|lifestyle|plan|diagnosis)\b'])
+            is_compound = bool(re.search(r'\b(?:and|as\s+well\s+as|treatment|management)\b', q_lower))
+            if not has_followup_info and not (is_compound and has_treatment_info):
                 return False, "missing_followup_information_in_context"
 
         # 6. Core Term Overlap Check (guard against queries about specific terms not in text)
-        stop_words = {
-            "what", "is", "are", "the", "difference", "between", "common", "main", "for", "in", "of", "and",
-            "to", "a", "an", "according", "uploaded", "document", "tell", "me", "about", "can", "you",
-            "explain", "describe", "which", "them", "they", "it", "this", "that", "these", "those", "how",
-            "does", "do", "from", "with", "or", "by", "on", "at", "be", "as", "have", "has", "summarize",
-            "summary", "overview", "provide", "show", "give", "list", "general",
-            "patient", "patients", "chart", "charts", "case", "cases", "report", "reports",
-            "document", "documents", "record", "records", "note", "notes", "file", "files"
-        }
-        q_tokens = [w for w in re.findall(r'\b[a-z]{3,}\b', q_focus or q_lower) if w not in stop_words]
-        expanded_terms = MedicalQueryExpander.get_expanded_terms(question)
-        expanded_tokens = [
-            w for term in expanded_terms
-            for w in re.findall(r'\b[a-z]{3,}\b', term.lower())
-            if w not in stop_words
-        ]
-        all_check_tokens = set(q_tokens + expanded_tokens)
-        if all_check_tokens:
-            has_token_overlap = any(
-                tok in combined_text or
-                (len(tok) >= 5 and tok[:-1] in combined_text) or
-                (len(tok) >= 6 and tok[:5] in combined_text)
-                for tok in all_check_tokens
-            )
-            if not has_token_overlap:
-                return False, "no_core_query_terms_found_in_retrieved_context"
+        is_summary_or_comparison = (
+            (query_plan is not None and getattr(getattr(query_plan, "intent", None), "value", str(getattr(query_plan, "intent", ""))) in ("DOCUMENT_SUMMARY", "DOCUMENT_COMPARISON")) or
+            bool(re.search(r'\b(?:summar(?:y|ize)|overview|synthes(?:is|ize)|compar(?:e|ison|ative)|contrast|difference\s+between|topics?|scope|sections?|main\s+points?|key\s+findings?)\b', q_lower))
+        )
+        if not is_summary_or_comparison:
+            stop_words = {
+                "what", "is", "are", "the", "difference", "between", "common", "main", "for", "in", "of", "and",
+                "to", "a", "an", "according", "uploaded", "document", "tell", "me", "about", "can", "you",
+                "explain", "describe", "which", "them", "they", "it", "this", "that", "these", "those", "how",
+                "does", "do", "from", "with", "or", "by", "on", "at", "be", "as", "have", "has", "summarize",
+                "summary", "overview", "provide", "show", "give", "list", "general",
+                "patient", "patients", "chart", "charts", "case", "cases", "report", "reports",
+                "document", "documents", "record", "records", "note", "notes", "file", "files",
+                "compare", "comparison", "contrast", "recommendation", "recommendations", "findings"
+            }
+            q_tokens = [w for w in re.findall(r'\b[a-z]{3,}\b', q_focus or q_lower) if w not in stop_words]
+            expanded_terms = MedicalQueryExpander.get_expanded_terms(question)
+            expanded_tokens = [
+                w for term in expanded_terms
+                for w in re.findall(r'\b[a-z]{3,}\b', term.lower())
+                if w not in stop_words
+            ]
+            all_check_tokens = set(q_tokens + expanded_tokens)
+            if all_check_tokens:
+                has_token_overlap = any(
+                    tok in combined_text or
+                    (len(tok) >= 5 and tok[:-1] in combined_text) or
+                    (len(tok) >= 6 and tok[:5] in combined_text)
+                    for tok in all_check_tokens
+                )
+                if not has_token_overlap:
+                    return False, "no_core_query_terms_found_in_retrieved_context"
 
         return True, "context_relevant_and_sufficient"
 
@@ -1067,7 +1176,8 @@ class RAGService:
         top_k: Optional[int] = None,
         similarity_threshold: Optional[float] = None,
         user_id: Optional[int] = None,
-        query_plan: Optional[Any] = None
+        query_plan: Optional[Any] = None,
+        document_id: Optional[str] = None
     ) -> List[Dict[str, Any]]:
         """
         Processes a query string, computes its vector embedding, retrieves nearest
@@ -1080,6 +1190,7 @@ class RAGService:
             similarity_threshold: Optional minimum cosine similarity cutoff.
             user_id: Optional user ID for ownership isolation.
             query_plan: Optional strongly typed QueryPlan controlling retrieval parameters.
+            document_id: Optional document ID or filename for strict single-document scoping.
 
         Returns:
             List of filtered, deduplicated, and ranked chunk records matching the threshold.
@@ -1115,6 +1226,18 @@ class RAGService:
                 sq_vec = EmbeddingService.embed_query(sq)
                 if sq_vec:
                     raw_results.extend(self.vector_store.search(sq_vec, top_k=candidate_k, user_id=user_id))
+        elif re.search(r'\b(?:summar(?:y|ize)|overview|synthes(?:is|ize)|main\s+points?|key\s+findings?|compar(?:e|ison|ative)|contrast|difference\s+between|across\s+(?:the\s+)?documents?|abstract|introduction|what\s+is\s+this\s+document\s+about|what\s+does\s+the\s+(?:uploaded\s+)?document\s+(?:say|discuss|contain|cover|describe))\b', q_clean, re.IGNORECASE):
+            summary_terms = [
+                "patient clinical summary diagnosis findings",
+                "primary assessment clinical findings and treatment plan",
+                "clinical recommendations guidelines and management plan",
+                "lifestyle measures treatment plan and clinical findings",
+                "clinical trial findings and recommendations"
+            ]
+            for sq in summary_terms:
+                sq_vec = EmbeddingService.embed_query(sq)
+                if sq_vec:
+                    raw_results.extend(self.vector_store.search(sq_vec, top_k=candidate_k, user_id=user_id))
         elif MedicalQueryExpander.is_multi_aspect_query(q_clean):
             sub_queries = MedicalQueryExpander.decompose_multi_aspect_query(q_clean)
             for sq in sub_queries:
@@ -1126,6 +1249,16 @@ class RAGService:
             exp_vec = EmbeddingService.embed_query(exp_q)
             if exp_vec:
                 raw_results.extend(self.vector_store.search(exp_vec, top_k=candidate_k, user_id=user_id))
+
+        # Document ID filter if specified (scope early so other documents do not crowd out candidate pool)
+        if document_id is not None and str(document_id).strip():
+            d_target = str(document_id).strip().lower()
+            raw_results = [
+                c for c in raw_results
+                if str(c.get("document_id") or "").lower() == d_target
+                or str(c.get("metadata", {}).get("document_id") or "").lower() == d_target
+                or d_target in str(c.get("metadata", {}).get("filename") or "").lower()
+            ]
 
         # Apply similarity threshold cutoff
         filtered_results = [
@@ -1142,6 +1275,16 @@ class RAGService:
             chunks=deduped_results,
             threshold=threshold
         )
+
+        # Document ID filter if specified
+        if document_id is not None and str(document_id).strip():
+            d_target = str(document_id).strip().lower()
+            precision_results = [
+                c for c in precision_results
+                if str(c.get("document_id") or "").lower() == d_target
+                or str(c.get("metadata", {}).get("document_id") or "").lower() == d_target
+                or d_target in str(c.get("metadata", {}).get("filename") or "").lower()
+            ]
 
         # Scoped document filter if query plan specifies
         if query_plan is not None and getattr(query_plan, "scoped_document_name", None):
@@ -1311,7 +1454,8 @@ class RAGService:
         top_k: Optional[int] = None,
         similarity_threshold: Optional[float] = None,
         user_id: Optional[int] = None,
-        query_plan: Optional[Any] = None
+        query_plan: Optional[Any] = None,
+        document_id: Optional[str] = None
     ) -> Dict[str, Any]:
         """
         Executes the full RAG retrieval pipeline and returns a structured response object
@@ -1323,6 +1467,7 @@ class RAGService:
             similarity_threshold: Minimum similarity cutoff score.
             user_id: Optional user ID for ownership isolation.
             query_plan: Optional strongly typed QueryPlan controlling retrieval parameters.
+            document_id: Optional document ID or filename for strict single-document scoping.
 
         Returns:
             Dictionary containing:
@@ -1407,6 +1552,16 @@ class RAGService:
                 sq_vec = EmbeddingService.embed_query(sq)
                 if sq_vec:
                     raw_results.extend(self.vector_store.search(sq_vec, top_k=candidate_k, user_id=user_id))
+        elif re.search(r'\b(?:summar(?:y|ize)|overview|synthes(?:is|ize)|main\s+points?|key\s+findings?|compar(?:e|ison|ative)|contrast|difference\s+between|across\s+(?:the\s+)?documents?|abstract|introduction|what\s+is\s+this\s+document\s+about|what\s+does\s+the\s+(?:uploaded\s+)?document\s+(?:say|discuss|contain|cover|describe))\b', cleaned_question, re.IGNORECASE):
+            summary_terms = [
+                "patient clinical summary diagnosis findings",
+                "primary assessment clinical findings and treatment plan",
+                "clinical recommendations guidelines and management plan"
+            ]
+            for sq in summary_terms:
+                sq_vec = EmbeddingService.embed_query(sq)
+                if sq_vec:
+                    raw_results.extend(self.vector_store.search(sq_vec, top_k=candidate_k, user_id=user_id))
         elif MedicalQueryExpander.is_multi_aspect_query(cleaned_question):
             sub_queries = MedicalQueryExpander.decompose_multi_aspect_query(cleaned_question)
             for sq in sub_queries:
@@ -1437,6 +1592,16 @@ class RAGService:
             chunks=deduped_chunks,
             threshold=threshold
         )
+
+        # Document ID filter if specified
+        if document_id is not None and str(document_id).strip():
+            d_target = str(document_id).strip().lower()
+            precision_chunks = [
+                c for c in precision_chunks
+                if str(c.get("document_id") or "").lower() == d_target
+                or str(c.get("metadata", {}).get("document_id") or "").lower() == d_target
+                or d_target in str(c.get("metadata", {}).get("filename") or "").lower()
+            ]
 
         # Scoped document filter if query plan specifies
         if query_plan is not None and getattr(query_plan, "scoped_document_name", None):
@@ -1717,6 +1882,27 @@ class RAGService:
 
         effective_query = context_resolution.effective_query
 
+        if effective_query and effective_query.startswith("CLARIFICATION_REQUIRED:"):
+            clarification_msg = effective_query.replace("CLARIFICATION_REQUIRED:", "").strip()
+            return {
+                "request_id": trace_id,
+                "question": question or "",
+                "answer": clarification_msg,
+                "retrieval_status": "no_relevant_context",
+                "retrieved_chunks": [],
+                "context": "",
+                "sources": [],
+                "disclaimer": MEDICAL_DISCLAIMER,
+                "intent": {"intent": "CLARIFICATION_REQUIRED"},
+                "query_plan": None,
+                "dialogue_context": context_resolution.to_dict(),
+                "timings": {
+                    "total_time_ms": 0.0,
+                    "llm_called": False,
+                    "gemini_calls_count": 0,
+                }
+            }
+
         # Phase 4 Medical Safety Pre-Screening: Intercept emergency, self-harm, overdose
         from backend.safety.medical_safety_guard import MedicalSafetyGuard
         allow_rag, safety_assessment, immediate_msg = MedicalSafetyGuard.pre_screen_inquiry(question)
@@ -1876,14 +2062,131 @@ class RAGService:
                 }
             }
 
-        # Phase 6.2 Out-of-Scope Pre-Retrieval Intercept
+        # Phase 6.10 Greetings, Conversation & Educational Pre-Retrieval Intercept
         if allow_rag and not query_plan.retrieval_required:
+            cat_name = safety_assessment.category.value if hasattr(safety_assessment.category, "value") else str(safety_assessment.category)
+            
+            if intent_result.intent in (ClinicalIntent.GREETING, ClinicalIntent.GENERAL_CONVERSATION):
+                greeting_text = self.generate_greeting_response(question)
+                StructuredRAGLogger.emit_rag_log(RAGStructuredLogEvent(
+                    request_id=trace_id,
+                    query=question or "",
+                    safety_classification=cat_name,
+                    risk_level=safety_assessment.risk_level,
+                    retrieval_status="direct_conversation",
+                    embedding_latency_ms=0.0,
+                    vector_search_latency_ms=0.0,
+                    context_construction_latency_ms=0.0,
+                    llm_latency_ms=0.0,
+                    total_latency_ms=round(query_plan.latency_ms, 2),
+                    number_of_retrieved_chunks=0,
+                    similarity_scores=[],
+                    citation_validation_passed=True,
+                    citation_coverage=1.0,
+                    hallucination_detected=False,
+                    hallucination_types=[],
+                    final_status="SUCCESS",
+                    user_id=user_id,
+                    query_intent=intent_result.intent.value,
+                    llm_called=False,
+                    fallback_reason=None
+                ))
+                return {
+                    "request_id": trace_id,
+                    "question": question or "",
+                    "answer": greeting_text,
+                    "retrieval_status": "direct_conversation",
+                    "retrieved_chunks": [],
+                    "context": "",
+                    "sources": [],
+                    "disclaimer": MEDICAL_DISCLAIMER,
+                    "intent": intent_result.to_dict(),
+                    "query_plan": query_plan.to_dict(),
+                    "dialogue_context": context_resolution.to_dict(),
+                    "decision_support": {
+                        "calibrated_confidence": 1.0,
+                        "uncertainty_level": "RESOLVED",
+                        "primary_uncertainty_source": "NONE",
+                        "risk_tier": "MINIMAL",
+                        "escalation_required": False,
+                        "escalation_reason": None,
+                        "actionable_recommendations": [],
+                        "red_flag_triggers": [],
+                        "suggested_follow_up_inquiries": [],
+                        "clinical_handoff": None,
+                        "latency_ms": 0.0,
+                        "metadata": {"intent": intent_result.intent.value}
+                    },
+                    "timings": {
+                        "total_time_ms": round(query_plan.latency_ms, 2),
+                        "llm_called": False,
+                        "gemini_calls_count": 0,
+                    }
+                }
+
+            if intent_result.intent == ClinicalIntent.EDUCATIONAL_QUERY:
+                edu_text = self.generate_educational_response(question)
+                StructuredRAGLogger.emit_rag_log(RAGStructuredLogEvent(
+                    request_id=trace_id,
+                    query=question or "",
+                    safety_classification=cat_name,
+                    risk_level=safety_assessment.risk_level,
+                    retrieval_status="educational_response",
+                    embedding_latency_ms=0.0,
+                    vector_search_latency_ms=0.0,
+                    context_construction_latency_ms=0.0,
+                    llm_latency_ms=0.0,
+                    total_latency_ms=round(query_plan.latency_ms, 2),
+                    number_of_retrieved_chunks=0,
+                    similarity_scores=[],
+                    citation_validation_passed=True,
+                    citation_coverage=1.0,
+                    hallucination_detected=False,
+                    hallucination_types=[],
+                    final_status="SUCCESS",
+                    user_id=user_id,
+                    query_intent=intent_result.intent.value,
+                    llm_called=False,
+                    fallback_reason=None
+                ))
+                return {
+                    "request_id": trace_id,
+                    "question": question or "",
+                    "answer": edu_text,
+                    "retrieval_status": "educational_response",
+                    "retrieved_chunks": [],
+                    "context": "",
+                    "sources": [],
+                    "disclaimer": MEDICAL_DISCLAIMER,
+                    "intent": intent_result.to_dict(),
+                    "query_plan": query_plan.to_dict(),
+                    "dialogue_context": context_resolution.to_dict(),
+                    "decision_support": {
+                        "calibrated_confidence": 0.95,
+                        "uncertainty_level": "RESOLVED",
+                        "primary_uncertainty_source": "NONE",
+                        "risk_tier": "MINIMAL",
+                        "escalation_required": False,
+                        "escalation_reason": None,
+                        "actionable_recommendations": [],
+                        "red_flag_triggers": [],
+                        "suggested_follow_up_inquiries": [],
+                        "clinical_handoff": None,
+                        "latency_ms": 0.0,
+                        "metadata": {"intent": intent_result.intent.value}
+                    },
+                    "timings": {
+                        "total_time_ms": round(query_plan.latency_ms, 2),
+                        "llm_called": False,
+                        "gemini_calls_count": 0,
+                    }
+                }
+
             out_of_scope_msg = (
                 "I am a specialized clinical AI assistant designed to answer healthcare, medical, "
                 "and pharmacological queries. Your question appears to be outside of clinical scope. "
                 "Please submit a health-related inquiry."
             )
-            cat_name = safety_assessment.category.value if hasattr(safety_assessment.category, "value") else str(safety_assessment.category)
             StructuredRAGLogger.emit_rag_log(RAGStructuredLogEvent(
                 request_id=trace_id,
                 query=question or "",
@@ -2099,6 +2402,218 @@ class RAGService:
                 ))
                 return cached_payload
 
+        # Multi-document comparison validation guard
+        strat_str = str(getattr(getattr(query_plan, "retrieval_strategy", None), "value", getattr(query_plan, "retrieval_strategy", ""))).lower()
+        multi_strat_str = str(getattr(getattr(query_plan, "multi_document_strategy", None), "value", getattr(query_plan, "multi_document_strategy", ""))).lower()
+        is_document_comparison = (
+            getattr(intent_result.intent, "value", str(intent_result.intent)) in ("DOCUMENT_COMPARISON", "document_comparison") or
+            "document_comparison" in strat_str or
+            "balanced" in multi_strat_str
+        )
+        if is_document_comparison:
+            accessible_docs = self.vector_store.get_accessible_document_names(user_id=user_id)
+            if len(accessible_docs) < 2:
+                if len(accessible_docs) == 1:
+                    doc_name = accessible_docs[0]
+                    comp_msg = (
+                        f"A two-document comparison cannot be completed because only one processed document is currently available in your account ('{doc_name}'). "
+                        "To perform a comparative analysis, please ensure at least two distinct clinical documents have been uploaded and processed."
+                    )
+                else:
+                    comp_msg = (
+                        "A two-document comparison cannot be completed because there are no processed documents currently available in your account. "
+                        "To perform a comparative analysis, please upload at least two distinct clinical documents."
+                    )
+                return {
+                    "request_id": trace_id,
+                    "question": question or "",
+                    "answer": comp_msg,
+                    "retrieval_status": "insufficient_documents",
+                    "retrieved_chunks": [],
+                    "context": "",
+                    "sources": [],
+                    "disclaimer": MEDICAL_DISCLAIMER,
+                    "intent": intent_result.to_dict(),
+                    "query_plan": query_plan.to_dict(),
+                    "dialogue_context": context_resolution.to_dict(),
+                    "timings": {
+                        "total_time_ms": 0.0,
+                        "llm_called": False,
+                        "gemini_calls_count": 0,
+                    }
+                }
+
+        # Phase 6.9 Meta-conversational inquiry handling (e.g. "Summarize your previous answer")
+        is_summary_of_previous = (
+            getattr(context_resolution, "resolved_topic", None) == "previous_answer" or
+            bool(re.search(
+                r'\b(?:summarize|summary\s+of|explain|recap|repeat)\s+(?:your\s+)?(?:previous|prior|last|earlier)\s+(?:answer|response|message|statement|what\s+you\s+(?:just\s+)?said)\b',
+                question.lower() if question else ""
+            ))
+        )
+        if is_summary_of_previous:
+            last_asst_turn = None
+            has_clarification_turn = False
+            if conversation_history:
+                for turn in reversed(conversation_history):
+                    r = turn.get("role") or turn.get("sender")
+                    c = turn.get("content") or turn.get("text") or ""
+                    if r == "assistant" and c.strip():
+                        if ClinicalContextEngine.is_clarification_message(c):
+                            has_clarification_turn = True
+                            continue
+                        last_asst_turn = c.strip()
+                        break
+            if not last_asst_turn:
+                if has_clarification_turn:
+                    empty_hist_msg = (
+                        "The previous message was a clarification question, not clinical findings. "
+                        "Please ask your clinical question or provide the requested details so I can retrieve and summarize the relevant medical information for you."
+                    )
+                else:
+                    empty_hist_msg = (
+                        "There are no previous messages in this conversation to summarize. "
+                        "Please ask a question about your uploaded document."
+                    )
+                return {
+                    "request_id": trace_id,
+                    "question": question or "",
+                    "answer": empty_hist_msg,
+                    "retrieval_status": "no_relevant_context",
+                    "retrieved_chunks": [],
+                    "context": "",
+                    "sources": [],
+                    "disclaimer": MEDICAL_DISCLAIMER,
+                    "intent": intent_result.to_dict(),
+                    "query_plan": query_plan.to_dict(),
+                    "dialogue_context": context_resolution.to_dict(),
+                    "timings": {
+                        "total_time_ms": 0.0,
+                        "llm_called": False,
+                        "gemini_calls_count": 0,
+                    }
+                }
+
+            cited_indices = [int(m) for m in re.findall(r'\[Source\s+(\d+)\]', last_asst_turn)]
+            mock_sources = [
+                {
+                    "source_index": idx,
+                    "source_label": f"[Source {idx}]",
+                    "source_id": str(idx),
+                    "document_id": str(idx),
+                    "filename": "Prior Answer Context",
+                    "page_number": 1,
+                    "similarity_score": 1.0,
+                    "text": last_asst_turn[:300]
+                }
+                for idx in sorted(list(set(cited_indices)))
+            ] or [
+                {
+                    "source_index": 1,
+                    "source_label": "[Source 1]",
+                    "source_id": "1",
+                    "document_id": "1",
+                    "filename": "Prior Answer Context",
+                    "page_number": 1,
+                    "similarity_score": 1.0,
+                    "text": last_asst_turn[:300]
+                }
+            ]
+
+            service = gemini_service or GeminiService()
+            try:
+                gen_res = service.generate_answer(
+                    question="Summarize the key clinical facts and recommendations from the following prior response clearly and concisely, preserving all citations:",
+                    context=f"[SOURCE 1] (Previous Response):\n{last_asst_turn}",
+                    conversation_context=None
+                )
+                prev_summary_ans = clean_ai_markdown(gen_res["answer"])
+            except Exception:
+                points = [p.strip() for p in re.split(r'[;\n]+', last_asst_turn) if len(p.strip()) > 15]
+                bullet_str = "\n".join(f"- {p}" for p in points[:4]) if points else f"- {last_asst_turn}"
+                prev_summary_ans = f"In summary, the previous response outlined:\n{bullet_str}"
+
+            return {
+                "request_id": trace_id,
+                "question": question or "",
+                "answer": prev_summary_ans,
+                "retrieval_status": "success",
+                "retrieved_chunks": mock_sources,
+                "context": f"[SOURCE 1]\n{last_asst_turn}",
+                "sources": mock_sources,
+                "disclaimer": MEDICAL_DISCLAIMER,
+                "intent": intent_result.to_dict(),
+                "query_plan": query_plan.to_dict(),
+                "dialogue_context": context_resolution.to_dict(),
+                "timings": {
+                    "total_time_ms": 10.0,
+                    "llm_called": True,
+                    "gemini_calls_count": 1,
+                }
+            }
+
+        # Phase 6.9 Ordinal recommendation simplification handling (e.g. "Explain the second recommendation in simpler language")
+        if effective_query and effective_query.startswith("EXPLAIN_RECOMMENDATION:"):
+            parts = effective_query.replace("EXPLAIN_RECOMMENDATION:", "").split("| CONTEXT:")
+            target_rec_clean = parts[0].strip()
+            target_rec = parts[1].strip() if len(parts) > 1 else target_rec_clean
+
+            cited_indices = [int(m) for m in re.findall(r'\[Source\s+(\d+)\]', target_rec)]
+            mock_sources = [
+                {
+                    "source_index": idx,
+                    "source_label": f"[Source {idx}]",
+                    "source_id": str(idx),
+                    "document_id": str(idx),
+                    "filename": "Prior Recommendation Context",
+                    "page_number": 1,
+                    "similarity_score": 1.0,
+                    "text": target_rec
+                }
+                for idx in sorted(list(set(cited_indices)))
+            ] or [
+                {
+                    "source_index": 1,
+                    "source_label": "[Source 1]",
+                    "source_id": "1",
+                    "document_id": "1",
+                    "filename": "Prior Recommendation Context",
+                    "page_number": 1,
+                    "similarity_score": 1.0,
+                    "text": target_rec
+                }
+            ]
+
+            service = gemini_service or GeminiService()
+            try:
+                gen_res = service.generate_answer(
+                    question=f"Explain this clinical recommendation in simpler, easy-to-understand language while keeping medical accuracy and preserving citations: {target_rec_clean}",
+                    context=f"[SOURCE 1] (Previous Recommendation):\n{target_rec}",
+                    conversation_context=None
+                )
+                simplified_ans = clean_ai_markdown(gen_res["answer"])
+            except Exception:
+                simplified_ans = f"In simpler terms, this recommendation means: {target_rec_clean} [Source 1]."
+
+            return {
+                "request_id": trace_id,
+                "question": question or "",
+                "answer": simplified_ans,
+                "retrieval_status": "success",
+                "retrieved_chunks": mock_sources,
+                "context": f"[SOURCE 1]\n{target_rec}",
+                "sources": mock_sources,
+                "disclaimer": MEDICAL_DISCLAIMER,
+                "intent": intent_result.to_dict(),
+                "query_plan": query_plan.to_dict(),
+                "dialogue_context": context_resolution.to_dict(),
+                "timings": {
+                    "total_time_ms": 10.0,
+                    "llm_called": True,
+                    "gemini_calls_count": 1,
+                }
+            }
+
         effective_search_query = effective_query
         conv_context_snippet = (
             f"User asked previously about: {context_resolution.cumulative_profile.entities[0].name}"
@@ -2110,7 +2625,8 @@ class RAGService:
             top_k=top_k,
             similarity_threshold=similarity_threshold,
             user_id=user_id,
-            query_plan=query_plan
+            query_plan=query_plan,
+            document_id=document_id
         )
 
         status = retrieval_res["retrieval_status"]
@@ -2322,14 +2838,36 @@ class RAGService:
             except Exception:
                 pass
 
+            accessible_docs = []
+            try:
+                accessible_docs = self.vector_store.get_accessible_document_names(user_id=user_id)
+            except Exception:
+                pass
+
+            target_subject = MedicalQueryExpander.extract_primary_subject(question or "")
+            if not target_subject:
+                target_subject = self.extract_query_clinical_focus(question or "")
+            if not target_subject:
+                clean_q = re.sub(r'^(what|tell|how|can|is|are|does|do|explain|describe)\s+(?:is|are|the|about|me\s+about)?\s*', '', (question or "").lower(), flags=re.IGNORECASE).strip('?.! ')
+                target_subject = clean_q if clean_q else "this topic"
+
+            if accessible_docs:
+                doc_list_str = ", ".join(accessible_docs)
+                fallback_no_context = (
+                    f"The reference documents in your account ({doc_list_str}) do not contain clinical evidence "
+                    f"or recommendations regarding '{target_subject}'. To receive an evidence-grounded answer, "
+                    f"please upload a medical reference document covering {target_subject} or consult authorized clinical guidelines."
+                )
+            else:
+                fallback_no_context = (
+                    "No reference documents are currently available in your account. "
+                    "Please upload your medical reference documents to receive evidence-grounded clinical answers."
+                )
+
             return {
                 "request_id": trace_id,
                 "question": question,
-                "answer": (
-                    "Relevant medical information could not be found in the available reference documents. "
-                    "To prevent unsupported healthcare answers, generation was halted. "
-                    "Please refine your query or consult authorized clinical guidelines."
-                ),
+                "answer": fallback_no_context,
                 "retrieval_status": "no_relevant_context",
                 "retrieved_chunks": [],
                 "context": "",
@@ -2360,11 +2898,7 @@ class RAGService:
                     "confidence": "INSUFFICIENT",
                     "coverage_status": "INSUFFICIENT",
                     "support_level": "INSUFFICIENT",
-                    "answer": (
-                        "Relevant medical information could not be found in the available reference documents. "
-                        "To prevent unsupported healthcare answers, generation was halted. "
-                        "Please refine your query or consult authorized clinical guidelines."
-                    ),
+                    "answer": fallback_no_context,
                     "sections": [],
                     "conflicts_present": False,
                     "conflict_summary": None,
@@ -2484,42 +3018,6 @@ class RAGService:
         # If the query asks which risk factors can be modified / modifiable risk factors,
         # but the document only lists risk factors and general lifestyle measures separately
         # without explicitly categorizing which specific risk factors are modifiable:
-        # Enforce grounded limitation without unsupported classifications or cross-context inferences.
-        is_modifiable_query = bool(re.search(
-            r'\b(?:which\s+(?:of\s+)?(?:them|these|those)?\s+can\s+be\s+modified|can\s+(?:any\s+of\s+)?(?:them|these|those)\s+be\s+modified|how\s+can\s+(?:they|them|these|those)\s+be\s+modified|which\s+(?:risk\s+)?factors\s+can\s+be\s+modified|modifiable\s+(?:risk\s+)?factors?)\b',
-            question,
-            re.IGNORECASE
-        )) or bool(re.search(
-            r'\b(?:which\s+(?:of\s+)?(?:them|these|those)?\s+can\s+be\s+modified|can\s+(?:any\s+of\s+)?(?:them|these|those)\s+be\s+modified|how\s+can\s+(?:they|them|these|those)\s+be\s+modified|which\s+(?:risk\s+)?factors\s+can\s+be\s+modified|modifiable\s+(?:risk\s+)?factors?)\b',
-            effective_search_query,
-            re.IGNORECASE
-        ))
-
-        ctx_lower = retrieval_res.get("context", "").lower()
-        has_explicit_modifiable = bool(re.search(
-            r'\b(?:modifiable\s+risk\s+factors?|risk\s+factors?\s+(?:that\s+)?(?:are|can\s+be)\s+modified|classified\s+as\s+modifiable|categorized\s+as\s+modifiable)\b',
-            ctx_lower
-        ))
-
-        if is_modifiable_query and not has_explicit_modifiable:
-            topic_name = "hypertension"
-            if "hypertens" in ctx_lower or "hypertens" in question.lower() or (conv_context_snippet and "hypertens" in conv_context_snippet.lower()):
-                topic_name = "hypertension"
-
-            ans_lower = cleaned_answer.lower()
-            # Detect if model made an unsupported medical classification across separate sections
-            has_unsupported_classification = bool(re.search(
-                r'\b(?:can\s+be\s+modified\s+include|factors\s+that\s+can\s+be\s+modified|are\s+considered\s+modifiable|can\s+be\s+classified\s+as\s+modifiable|are\s+modifiable|can\s+be\s+modified\s+through)\b',
-                ans_lower
-            ))
-            states_grounded_limitation = bool(re.search(
-                r'\bdoes\s+not\s+explicitly\s+(?:identify|categorize|classify)\s+(?:which|any)\b',
-                ans_lower
-            ))
-
-            if has_unsupported_classification or not states_grounded_limitation:
-                cleaned_answer = f"The document lists several {topic_name} risk factors and separately describes lifestyle measures, but it does not explicitly identify which specific risk factors are modifiable [Source 1]."
-
         # 5. Deterministic Citation Validation & Evidence Pruning (Phase 6.5)
         all_retrieved_sources = retrieval_res["sources"]
         from backend.intelligence.citation_attribution import ClinicalCitationAttributionEngine
@@ -2551,9 +3049,7 @@ class RAGService:
         claims_supported_total = max(validation_result.claims_supported, attribution_report.verified_claims_count)
 
         all_unsupported_rejection = (
-            (validation_result.claims_checked > 0 and validation_result.claims_supported == 0) or
-            (attribution_report.factual_claims_count > 0 and attribution_report.verified_claims_count == 0) or
-            (claims_supported_total == 0) or
+            (claims_supported_total == 0 and claims_unsupported_total > 0) or
             (validation_result.cleaned_grounded_answer and "Relevant medical information could not be found" in validation_result.cleaned_grounded_answer) or
             (attribution_report.cleaned_attributed_answer and "Relevant medical information could not be found" in attribution_report.cleaned_attributed_answer)
         )
@@ -2661,9 +3157,12 @@ class RAGService:
         # [Source 1] -> source_index 1, [Source 3] -> source_index 3
         valid_citations = validation_result.valid_citations
         safe_text = cleaned_answer.lower()
-        is_grounded_limitation = bool(
-            re.search(r'\bdoes\s+not\s+explicitly\s+(?:identify|categorize|classify)\s+which\b', safe_text) or
-            re.search(r'\bseparately\s+describes\s+lifestyle\s+measures,\s+but\s+it\s+does\s+not\b', safe_text)
+        has_substantive_verified_claims = bool(
+            (claims_supported_total > 0 or getattr(verification_result, "grounded_claims_count", 0) > 0 or len(valid_citations) > 0) and
+            not all_unsupported_rejection
+        )
+        is_grounded_limitation = has_substantive_verified_claims or bool(
+            re.search(r'\bdoes\s+not\s+explicitly\s+(?:identify|categorize|classify)\s+which\b', safe_text)
         )
 
         # Phase 2: Grounded Document Boundary & Explicit Negative Scope Detection
@@ -2700,7 +3199,7 @@ class RAGService:
                 if targets_boundary_entity and ans_reflects_boundary:
                     is_grounded_boundary = True
 
-        is_absence_or_refusal = (not is_grounded_limitation) and (not is_grounded_boundary) and any(
+        is_absence_or_refusal = (not has_substantive_verified_claims) and (not is_grounded_limitation) and (not is_grounded_boundary) and any(
             phrase in safe_text for phrase in [
                 "do not contain",
                 "do not mention",
@@ -3087,6 +3586,34 @@ class RAGService:
 
         effective_query = context_resolution.effective_query
 
+        if effective_query and effective_query.startswith("CLARIFICATION_REQUIRED:"):
+            clarification_msg = effective_query.replace("CLARIFICATION_REQUIRED:", "").strip()
+            elapsed_ms = round((time.perf_counter() - start_time) * 1000.0, 2)
+            yield ("status", {
+                "step": "dialogue_resolution",
+                "status": "clarification_required",
+                "message": "Clarifying question required."
+            })
+            yield ("token", {"token": clarification_msg, "index": 0})
+            yield ("complete", {
+                "request_id": trace_id,
+                "question": question or "",
+                "answer": clarification_msg,
+                "retrieval_status": "no_relevant_context",
+                "sources": [],
+                "context": "",
+                "disclaimer": MEDICAL_DISCLAIMER,
+                "intent": {"intent": "CLARIFICATION_REQUIRED"},
+                "query_plan": None,
+                "dialogue_context": context_resolution.to_dict(),
+                "timings": {
+                    "total_time_ms": elapsed_ms,
+                    "llm_called": False,
+                    "gemini_calls_count": 0,
+                }
+            })
+            return
+
         # 2. Medical Safety Pre-Screening: Intercept emergency, self-harm, overdose
         allow_rag, safety_assessment, immediate_msg = MedicalSafetyGuard.pre_screen_inquiry(question)
         if allow_rag and effective_query != question:
@@ -3140,11 +3667,12 @@ class RAGService:
                 query=question or "",
                 fallback_reason="safety_intercepted"
             )
-            yield ("error", {
+            yield ("status", {
+                "step": "safety_screening",
                 "request_id": trace_id,
-                "error": safety_assessment.reason,
+                "status": "safety_intercepted",
                 "category": cat_name,
-                "status": "safety_intercepted"
+                "message": safety_assessment.reason
             })
             yield ("answer_synthesis", {
                 "answer_synthesis": fallback_synth.to_dict()
@@ -3196,9 +3724,54 @@ class RAGService:
                 "dialogue_context": context_resolution.to_dict()
             })
 
-        # Phase 6.2 Out-of-Scope Pre-Retrieval Intercept
+        # Phase 6.10 Greetings, Conversation & Educational Pre-Retrieval Intercept
         if allow_rag and not query_plan.retrieval_required:
             elapsed_ms = round((time.perf_counter() - start_time) * 1000.0, 2)
+            
+            if intent_result.intent in (ClinicalIntent.GREETING, ClinicalIntent.GENERAL_CONVERSATION):
+                greeting_text = self.generate_greeting_response(question)
+                yield ("token", {"token": greeting_text, "index": 0})
+                yield ("complete", {
+                    "request_id": trace_id,
+                    "question": question or "",
+                    "answer": greeting_text,
+                    "retrieval_status": "direct_conversation",
+                    "sources": [],
+                    "context": "",
+                    "disclaimer": MEDICAL_DISCLAIMER,
+                    "intent": intent_result.to_dict(),
+                    "query_plan": query_plan.to_dict(),
+                    "dialogue_context": context_resolution.to_dict(),
+                    "timings": {
+                        "total_time_ms": elapsed_ms,
+                        "llm_called": False,
+                        "gemini_calls_count": 0,
+                    }
+                })
+                return
+
+            if intent_result.intent == ClinicalIntent.EDUCATIONAL_QUERY:
+                edu_text = self.generate_educational_response(question)
+                yield ("token", {"token": edu_text, "index": 0})
+                yield ("complete", {
+                    "request_id": trace_id,
+                    "question": question or "",
+                    "answer": edu_text,
+                    "retrieval_status": "educational_response",
+                    "sources": [],
+                    "context": "",
+                    "disclaimer": MEDICAL_DISCLAIMER,
+                    "intent": intent_result.to_dict(),
+                    "query_plan": query_plan.to_dict(),
+                    "dialogue_context": context_resolution.to_dict(),
+                    "timings": {
+                        "total_time_ms": elapsed_ms,
+                        "llm_called": False,
+                        "gemini_calls_count": 0,
+                    }
+                })
+                return
+
             out_of_scope_msg = (
                 "I am a specialized clinical AI assistant designed to answer healthcare, medical, "
                 "and pharmacological queries. Your question appears to be outside of clinical scope. "
@@ -3290,6 +3863,229 @@ class RAGService:
             "message": "Searching healthcare knowledge base for reference evidence..."
         })
 
+        # Multi-document comparison validation guard
+        strat_str = str(getattr(getattr(query_plan, "retrieval_strategy", None), "value", getattr(query_plan, "retrieval_strategy", ""))).lower()
+        multi_strat_str = str(getattr(getattr(query_plan, "multi_document_strategy", None), "value", getattr(query_plan, "multi_document_strategy", ""))).lower()
+        is_document_comparison = (
+            getattr(intent_result.intent, "value", str(intent_result.intent)) in ("DOCUMENT_COMPARISON", "document_comparison") or
+            "document_comparison" in strat_str or
+            "balanced" in multi_strat_str
+        )
+        if is_document_comparison:
+            accessible_docs = self.vector_store.get_accessible_document_names(user_id=user_id)
+            if len(accessible_docs) < 2:
+                elapsed_ms = round((time.perf_counter() - start_time) * 1000.0, 2)
+                if len(accessible_docs) == 1:
+                    doc_name = accessible_docs[0]
+                    comp_msg = (
+                        f"A two-document comparison cannot be completed because only one processed document is currently available in your account ('{doc_name}'). "
+                        "To perform a comparative analysis, please ensure at least two distinct clinical documents have been uploaded and processed."
+                    )
+                else:
+                    comp_msg = (
+                        "A two-document comparison cannot be completed because there are no processed documents currently available in your account. "
+                        "To perform a comparative analysis, please upload at least two distinct clinical documents."
+                    )
+                yield ("token", {"token": comp_msg, "index": 0})
+                yield ("complete", {
+                    "request_id": trace_id,
+                    "question": question or "",
+                    "answer": comp_msg,
+                    "retrieval_status": "insufficient_documents",
+                    "sources": [],
+                    "context": "",
+                    "disclaimer": MEDICAL_DISCLAIMER,
+                    "intent": intent_result.to_dict(),
+                    "query_plan": query_plan.to_dict(),
+                    "dialogue_context": context_resolution.to_dict(),
+                    "timings": {
+                        "total_time_ms": elapsed_ms,
+                        "llm_called": False,
+                        "gemini_calls_count": 0,
+                    }
+                })
+                return
+
+        # Phase 6.9 Meta-conversational inquiry handling (e.g. "Summarize your previous answer")
+        is_summary_of_previous = (
+            getattr(context_resolution, "resolved_topic", None) == "previous_answer" or
+            bool(re.search(
+                r'\b(?:summarize|summary\s+of|explain|recap|repeat)\s+(?:your\s+)?(?:previous|prior|last|earlier)\s+(?:answer|response|message|statement|what\s+you\s+(?:just\s+)?said)\b',
+                question.lower() if question else ""
+            ))
+        )
+        if is_summary_of_previous:
+            last_asst_turn = None
+            has_clarification_turn = False
+            if conversation_history:
+                for turn in reversed(conversation_history):
+                    r = turn.get("role") or turn.get("sender")
+                    c = turn.get("content") or turn.get("text") or ""
+                    if r == "assistant" and c.strip():
+                        if ClinicalContextEngine.is_clarification_message(c):
+                            has_clarification_turn = True
+                            continue
+                        last_asst_turn = c.strip()
+                        break
+            if not last_asst_turn:
+                if has_clarification_turn:
+                    empty_hist_msg = (
+                        "The previous message was a clarification question, not clinical findings. "
+                        "Please ask your clinical question or provide the requested details so I can retrieve and summarize the relevant medical information for you."
+                    )
+                else:
+                    empty_hist_msg = (
+                        "There are no previous messages in this conversation to summarize. "
+                        "Please ask a question about your uploaded document."
+                    )
+                yield ("token", {"token": empty_hist_msg, "index": 0})
+                yield ("complete", {
+                    "request_id": trace_id,
+                    "question": question or "",
+                    "answer": empty_hist_msg,
+                    "retrieval_status": "no_relevant_context",
+                    "sources": [],
+                    "context": "",
+                    "disclaimer": MEDICAL_DISCLAIMER,
+                    "intent": intent_result.to_dict(),
+                    "query_plan": query_plan.to_dict(),
+                    "dialogue_context": context_resolution.to_dict(),
+                    "timings": {
+                        "total_time_ms": 0.0,
+                        "llm_called": False,
+                        "gemini_calls_count": 0,
+                    }
+                })
+                return
+
+            cited_indices = [int(m) for m in re.findall(r'\[Source\s+(\d+)\]', last_asst_turn)]
+            mock_sources = [
+                {
+                    "source_index": idx,
+                    "source_label": f"[Source {idx}]",
+                    "source_id": str(idx),
+                    "document_id": str(idx),
+                    "filename": "Prior Answer Context",
+                    "page_number": 1,
+                    "similarity_score": 1.0,
+                    "text": last_asst_turn[:300]
+                }
+                for idx in sorted(list(set(cited_indices)))
+            ] or [
+                {
+                    "source_index": 1,
+                    "source_label": "[Source 1]",
+                    "source_id": "1",
+                    "document_id": "1",
+                    "filename": "Prior Answer Context",
+                    "page_number": 1,
+                    "similarity_score": 1.0,
+                    "text": last_asst_turn[:300]
+                }
+            ]
+
+            service = gemini_service or GeminiService()
+            try:
+                gen_res = service.generate_answer(
+                    question="Summarize the key clinical facts and recommendations from the following prior response clearly and concisely, preserving all citations:",
+                    context=f"[SOURCE 1] (Previous Response):\n{last_asst_turn}",
+                    conversation_context=None
+                )
+                prev_summary_ans = clean_ai_markdown(gen_res["answer"])
+            except Exception:
+                points = [p.strip() for p in re.split(r'[;\n]+', last_asst_turn) if len(p.strip()) > 15]
+                bullet_str = "\n".join(f"- {p}" for p in points[:4]) if points else f"- {last_asst_turn}"
+                prev_summary_ans = f"In summary, the previous response outlined:\n{bullet_str}"
+
+            yield ("sources", {"sources": mock_sources})
+            yield ("token", {"token": prev_summary_ans, "index": 0})
+            yield ("complete", {
+                "request_id": trace_id,
+                "question": question or "",
+                "answer": prev_summary_ans,
+                "retrieval_status": "success",
+                "sources": mock_sources,
+                "context": f"[SOURCE 1]\n{last_asst_turn}",
+                "disclaimer": MEDICAL_DISCLAIMER,
+                "intent": intent_result.to_dict(),
+                "query_plan": query_plan.to_dict(),
+                "dialogue_context": context_resolution.to_dict(),
+                "timings": {
+                    "total_time_ms": 10.0,
+                    "llm_called": True,
+                    "gemini_calls_count": 1,
+                }
+            })
+            return
+
+        # Phase 6.9 Ordinal recommendation simplification handling (e.g. "Explain the second recommendation in simpler language")
+        if effective_query and effective_query.startswith("EXPLAIN_RECOMMENDATION:"):
+            parts = effective_query.replace("EXPLAIN_RECOMMENDATION:", "").split("| CONTEXT:")
+            target_rec_clean = parts[0].strip()
+            target_rec = parts[1].strip() if len(parts) > 1 else target_rec_clean
+
+            cited_indices = [int(m) for m in re.findall(r'\[Source\s+(\d+)\]', target_rec)]
+            mock_sources = [
+                {
+                    "source_index": idx,
+                    "source_label": f"[Source {idx}]",
+                    "source_id": str(idx),
+                    "document_id": str(idx),
+                    "filename": "Prior Recommendation Context",
+                    "page_number": 1,
+                    "similarity_score": 1.0,
+                    "text": target_rec
+                }
+                for idx in sorted(list(set(cited_indices)))
+            ] or [
+                {
+                    "source_index": 1,
+                    "source_label": "[Source 1]",
+                    "source_id": "1",
+                    "document_id": "1",
+                    "filename": "Prior Recommendation Context",
+                    "page_number": 1,
+                    "similarity_score": 1.0,
+                    "text": target_rec
+                }
+            ]
+
+            service = gemini_service or GeminiService()
+            try:
+                gen_res = service.generate_answer(
+                    question=f"Explain this clinical recommendation in simpler, easy-to-understand language while keeping medical accuracy and preserving citations: {target_rec_clean}",
+                    context=f"[SOURCE 1] (Previous Recommendation):\n{target_rec}",
+                    conversation_context=None
+                )
+                simplified_ans = clean_ai_markdown(gen_res["answer"])
+            except Exception:
+                simplified_ans = f"In simpler terms, this recommendation means: {target_rec_clean} [Source 1]."
+
+            elapsed_ms = round((time.perf_counter() - start_time) * 1000.0, 2)
+            yield ("sources", {"sources": mock_sources})
+            words = simplified_ans.split(" ")
+            for idx, word in enumerate(words):
+                token = word if idx == len(words) - 1 else word + " "
+                yield ("token", {"token": token, "index": idx})
+            yield ("complete", {
+                "request_id": trace_id,
+                "question": question or "",
+                "answer": simplified_ans,
+                "retrieval_status": "success",
+                "sources": mock_sources,
+                "context": f"[SOURCE 1]\n{target_rec}",
+                "disclaimer": MEDICAL_DISCLAIMER,
+                "intent": intent_result.to_dict(),
+                "query_plan": query_plan.to_dict(),
+                "dialogue_context": context_resolution.to_dict(),
+                "timings": {
+                    "total_time_ms": elapsed_ms,
+                    "llm_called": True,
+                    "gemini_calls_count": 1,
+                }
+            })
+            return
+
         effective_search_query = effective_query
         conv_context_snippet = (
             f"User asked previously about: {context_resolution.cumulative_profile.entities[0].name}"
@@ -3301,7 +4097,8 @@ class RAGService:
             top_k=top_k,
             similarity_threshold=similarity_threshold,
             user_id=user_id,
-            query_plan=query_plan
+            query_plan=query_plan,
+            document_id=document_id
         )
 
         status = retrieval_res["retrieval_status"]
@@ -3330,11 +4127,32 @@ class RAGService:
                 "reason": retrieval_timings.get("gate_reason", "insufficient_evidence")
             })
 
-            fallback_answer = (
-                "Relevant medical information could not be found in the available reference documents. "
-                "To prevent unsupported healthcare answers, generation was halted. "
-                "Please refine your query or consult authorized clinical guidelines."
-            )
+            accessible_docs = []
+            try:
+                accessible_docs = self.vector_store.get_accessible_document_names(user_id=user_id)
+            except Exception:
+                pass
+
+            target_subject = MedicalQueryExpander.extract_primary_subject(question or "")
+            if not target_subject:
+                target_subject = self.extract_query_clinical_focus(question or "")
+            if not target_subject:
+                clean_q = re.sub(r'^(what|tell|how|can|is|are|does|do|explain|describe)\s+(?:is|are|the|about|me\s+about)?\s*', '', (question or "").lower(), flags=re.IGNORECASE).strip('?.! ')
+                target_subject = clean_q if clean_q else "this topic"
+
+            if accessible_docs:
+                doc_list_str = ", ".join(accessible_docs)
+                fallback_answer = (
+                    f"The reference documents in your account ({doc_list_str}) do not contain clinical evidence "
+                    f"or recommendations regarding '{target_subject}'. To receive an evidence-grounded answer, "
+                    f"please upload a medical reference document covering {target_subject} or consult authorized clinical guidelines."
+                )
+            else:
+                fallback_answer = (
+                    "No reference documents are currently available in your account. "
+                    "Please upload your medical reference documents to receive evidence-grounded clinical answers."
+                )
+
             if status == "empty_query":
                 fallback_answer = "Please provide a clinical question or inquiry."
 
@@ -3528,36 +4346,6 @@ class RAGService:
             "message": "Validating citations, grounding, and medical safety guardrails..."
         })
 
-        is_modifiable_query = bool(re.search(
-            r'\b(?:which\s+(?:of\s+)?(?:them|these|those)?\s+can\s+be\s+modified|can\s+(?:any\s+of\s+)?(?:them|these|those)\s+be\s+modified|how\s+can\s+(?:they|them|these|those)\s+be\s+modified|which\s+(?:risk\s+)?factors\s+can\s+be\s+modified|modifiable\s+(?:risk\s+)?factors?)\b',
-            question,
-            re.IGNORECASE
-        )) or bool(re.search(
-            r'\b(?:which\s+(?:of\s+)?(?:them|these|those)?\s+can\s+be\s+modified|can\s+(?:any\s+of\s+)?(?:them|these|those)\s+be\s+modified|how\s+can\s+(?:they|them|these|those)\s+be\s+modified|which\s+(?:risk\s+)?factors\s+can\s+be\s+modified|modifiable\s+(?:risk\s+)?factors?)\b',
-            effective_search_query,
-            re.IGNORECASE
-        ))
-        ctx_lower = retrieval_res.get("context", "").lower()
-        has_explicit_modifiable = bool(re.search(
-            r'\b(?:modifiable\s+risk\s+factors?|risk\s+factors?\s+(?:that\s+)?(?:are|can\s+be)\s+modified|classified\s+as\s+modifiable|categorized\s+as\s+modifiable)\b',
-            ctx_lower
-        ))
-        if is_modifiable_query and not has_explicit_modifiable:
-            topic_name = "hypertension"
-            if "hypertens" in ctx_lower or "hypertens" in question.lower() or (conv_context_snippet and "hypertens" in conv_context_snippet.lower()):
-                topic_name = "hypertension"
-            ans_lower = cleaned_answer.lower()
-            has_unsupported_classification = bool(re.search(
-                r'\b(?:can\s+be\s+modified\s+include|factors\s+that\s+can\s+be\s+modified|are\s+considered\s+modifiable|can\s+be\s+classified\s+as\s+modifiable|are\s+modifiable|can\s+be\s+modified\s+through)\b',
-                ans_lower
-            ))
-            states_grounded_limitation = bool(re.search(
-                r'\bdoes\s+not\s+explicitly\s+(?:identify|categorize|classify)\s+(?:which|any)\b',
-                ans_lower
-            ))
-            if has_unsupported_classification or not states_grounded_limitation:
-                cleaned_answer = f"The document lists several {topic_name} risk factors and separately describes lifestyle measures, but it does not explicitly identify which specific risk factors are modifiable [Source 1]."
-
         # 5. Deterministic Citation Validation & Evidence Pruning (Phase 6.5)
         all_retrieved_sources = retrieval_res["sources"]
         from backend.intelligence.citation_attribution import ClinicalCitationAttributionEngine
@@ -3672,7 +4460,11 @@ class RAGService:
 
         valid_citations = validation_result.valid_citations
         safe_text = cleaned_answer.lower()
-        is_grounded_limitation = bool(
+        has_substantive_verified_claims = bool(
+            (getattr(verification_result, "grounded_claims_count", 0) > 0 or len(valid_citations) > 0) and
+            not getattr(verification_result, "fallback_triggered", False)
+        )
+        is_grounded_limitation = has_substantive_verified_claims or bool(
             re.search(r'\bdoes\s+not\s+explicitly\s+(?:identify|categorize|classify)\s+which\b', safe_text) or
             re.search(r'\bseparately\s+describes\s+lifestyle\s+measures,\s+but\s+it\s+does\s+not\b', safe_text)
         )
@@ -3692,7 +4484,7 @@ class RAGService:
                 if ans_reflects_boundary:
                     is_grounded_boundary = True
 
-        is_absence_or_refusal = (not is_grounded_limitation) and (not is_grounded_boundary) and any(
+        is_absence_or_refusal = (not has_substantive_verified_claims) and (not is_grounded_limitation) and (not is_grounded_boundary) and any(
             phrase in safe_text for phrase in [
                 "do not contain", "do not mention", "not mentioned", "no mention",
                 "not provide that information", "not provide information", "not enough information",

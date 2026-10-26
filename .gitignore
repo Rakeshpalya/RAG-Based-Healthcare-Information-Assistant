@@ -44,6 +44,7 @@ Thumbs.db
 *.db
 *.sqlite
 *.sqlite3
+data/local_auth_credentials.json
 
 # Node modules & frontend artifacts
 node_modules/

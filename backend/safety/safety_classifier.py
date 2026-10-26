@@ -44,16 +44,18 @@ class SafetyClassifier:
 
     # 2. Self-Harm & Suicide Patterns
     SELF_HARM_PATTERNS = [
-        (r"\b(?:suicid\w*|kill\s+myself|end\s+my\s+life|want\s+to\s+die|hang\s+myself|cut\s+my\s+wrists?|self-harm|take\s+my\s+own\s+life)\b", "SELF_HARM_DIRECT"),
+        (r"\b(?:suicid\w*|kill(?:ing)?\s+myself|end(?:ing)?\s+my\s+life|want(?:ing)?\s+to\s+die|hang(?:ing)?\s+myself|cut(?:ting)?\s+my\s+wrists?|self-harm|tak(?:e|ing)\s+my\s+own\s+life)\b", "SELF_HARM_DIRECT"),
         (r"\bhow\s+to\s+(?:commit\s+suicide|kill\s+oneself|die\s+painlessly)\b", "SELF_HARM_METHODS"),
         (r"\b(?:never\s+wake\s+up|sleep\s+forever|to\s+never\s+wake\s+up)\b", "SELF_HARM_SLEEP")
     ]
 
     # 3. Poisoning & Overdose Patterns
     POISONING_OVERDOSE_PATTERNS = [
-        (r"\b(?:overdos\w*|took\s+(?:an?\s+)?(?:entire|whole)?\s*bottle\s+of\b|took\s+(?:an?\s+)?(?:entire\s+)?bottle\s+of\s+[\w\s]{0,25}pills|took\s+too\s+many\s+pills|swallowed\s+(?:an?\s+)?(?:entire|whole)?\s*bottle|(?:swallowed|took|ingested)\s+(?:\d{2,}|a\s+handful\s+of|too\s+many|excessive)\s+(?:[\w\-]+\s+)?(?:pills|tablets|capsules))\b", "OVERDOSE_MEDICATION"),
-        (r"\b(?:swallowed|drank|ingested)\s+(?:(?:an?\s+)?(?:whole|entire)?\s*(?:bottle|cup|glass|can|amount)\s+of\s+)?(?:bleach|poison|antifreeze|cleaner|detergent|chemical|battery|toxic)\b", "POISONING_INGESTION"),
-        (r"\b(?:toxic\s+exposure|chemical\s+burn\s+in\s+eye|inhaled\s+toxic\s+fumes)\b", "POISONING_EXPOSURE")
+        (r"\b(?:overdos\w*|took\s+(?:an?\s+)?(?:entire|whole)?\s*bottle\s+of\b|took\s+(?:an?\s+)?(?:entire\s+)?bottle\s+of\s+[\w\s]{0,25}pills|took\s+too\s+many\s+(?:pills|medications?|tablets?|capsules?|doses?)|swallowed\s+(?:an?\s+)?(?:entire|whole)?\s*bottle|(?:swallowed|took|ingested|consumed)\s+(?:\d{2,}|a\s+handful\s+of|too\s+many|excessive)\s+(?:[\w\-]+\s+)?(?:pills|tablets|capsules|medications?))\b", "OVERDOSE_MEDICATION"),
+        (r"\b(?:swallowed|swallow|swallowing|drank|drink|drinking|ingested|ingest|ingesting|ate|eat|eating|consumed|consuming|taken|taking)\s+(?:[\w\s]{0,30}?\b)?(?:bleach|poison|antifreeze|cleaner|drain[\s\-]cleaner|detergent|laundry\s+pod|chemical|battery|button\s+battery|toxic|acid|pesticide|herbicide|insecticide|disinfectant|solvent|paint\s+thinner|ammonia|lye|kerosene|gasoline|acetone|rat\s+poison)\b", "POISONING_INGESTION_VERB"),
+        (r"\b(?:bleach|poison|antifreeze|drain[\s\-]cleaner|cleaner|detergent|laundry\s+pod|chemical|battery|toxic(?:\s+substance)?|acid|caustic(?:\s+household)?\s+cleaner|pesticide|ammonia|lye|acetone|rat\s+poison)\s+(?:ingestion|swallowing|consumption|exposure|poisoning)\b", "POISONING_INGESTION_NOUN"),
+        (r"\b(?:ingestion|swallowing|consumption|drinking)\s+of\s+(?:an?\s+)?(?:[\w\s]{0,25}?\b)?(?:bleach|poison|antifreeze|cleaner|drain[\s\-]cleaner|detergent|chemical|battery|toxic|acid|pesticide|ammonia|lye|caustic)\b", "POISONING_OF_SUBSTANCE"),
+        (r"\b(?:poison(?:ed|ing)?|toxic\s+exposure|chemical\s+burn(?:\s+in\s+eye)?|inhaled\s+toxic\s+fumes|swallowed\s+poison|suspected\s+poisoning|accidental\s+poisoning|poison\s+control)\b", "POISONING_EXPOSURE")
     ]
 
     # 4. Immediate Danger / Unsafe & Unsupported Patterns

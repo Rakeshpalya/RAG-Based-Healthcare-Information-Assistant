@@ -118,3 +118,113 @@ def test_api_client_login_failure():
         assert res["token"] is None
         assert res["error"] == "Invalid email or password"
         assert api.token is None
+
+
+def test_auth_login_local_fallback_on_dns_failure(client):
+    """Verify login falls back to local auth in development when Supabase host cannot be resolved."""
+    from backend.services.auth_service import auth_service
+    # Test credentials for seeded local user
+    test_email = "ram0@gmail.com"
+    test_pass = "ram0@gmail.com"
+
+    # POST to /auth/login with valid local test credentials
+    resp = client.post("/auth/login", json={"email": test_email, "password": test_pass})
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["message"] == "Login successful"
+    assert data["user"]["email"] == test_email
+    assert "access_token" in data["session"]
+
+    # Verify token can be verified by get_current_user
+    token = data["session"]["access_token"]
+    user = auth_service.get_current_user(jwt=token)
+    assert user is not None
+    assert user["email"] == test_email
+
+
+def test_auth_login_local_fallback_rejects_wrong_password(client):
+    """Verify local auth strictly enforces password verification and rejects incorrect passwords."""
+    resp = client.post(
+        "/auth/login",
+        json={"email": "ram0@gmail.com", "password": "definitely_wrong_password"},
+    )
+    assert resp.status_code == 401
+    assert resp.json()["detail"] == "Invalid email or password"
+
+
+def test_auth_login_network_timeout_in_production_returns_504(client):
+    """Verify that an unhandled network timeout in production returns 504 Gateway Timeout."""
+    with patch("backend.api.auth_router.auth_service.login") as mock_login:
+        mock_login.side_effect = Exception("Read timed out on connection")
+
+        resp = client.post(
+            "/auth/login",
+            json={"email": "ram0@gmail.com", "password": "any_password"},
+        )
+        assert resp.status_code == 504
+        assert "timed out" in resp.json()["detail"]
+
+
+def test_auth_login_unreachable_provider_in_production_returns_503(client):
+    """Verify that unhandled connection/DNS failure in production returns 503 Service Unavailable."""
+    with patch("backend.api.auth_router.auth_service.login") as mock_login:
+        import httpx
+        mock_login.side_effect = httpx.ConnectError("[Errno 11001] getaddrinfo failed")
+
+        resp = client.post(
+            "/auth/login",
+            json={"email": "ram0@gmail.com", "password": "any_password"},
+        )
+
+def test_production_environment_strictly_prohibits_local_fallback():
+    """Verify that in production, local fallback methods raise PermissionError."""
+    from backend.services.auth_service import auth_service
+    from backend.config import settings
+
+    with patch.dict("os.environ", {"ENVIRONMENT": "production"}):
+        assert settings.is_production is True
+
+        with pytest.raises(PermissionError, match="strictly prohibited in production"):
+            auth_service._local_login("ram0@gmail.com", "ram0@gmail.com")
+
+        with pytest.raises(PermissionError, match="strictly prohibited in production"):
+            auth_service._local_signup("newuser@example.com", "password123")
+
+
+def test_production_login_does_not_fall_back_on_network_failure():
+    """Verify that in production, login failure raises exception instead of falling back locally."""
+    from backend.services.auth_service import auth_service
+    from backend.config import settings
+    import httpx
+
+    with patch.dict("os.environ", {"ENVIRONMENT": "production"}):
+        with patch.object(auth_service.client.auth, "sign_in_with_password") as mock_signin:
+            mock_signin.side_effect = httpx.ConnectError("[Errno 11001] getaddrinfo failed")
+
+            with pytest.raises(httpx.ConnectError):
+                auth_service.login("ram0@gmail.com", "ram0@gmail.com")
+
+
+def test_production_get_current_user_ignores_local_jwt():
+    """Verify that in production, get_current_user does not decode local JWTs and delegates to Supabase."""
+    from backend.services.auth_service import auth_service
+    from backend.config import settings
+    import jwt as pyjwt
+    import time
+
+    # Generate a valid local JWT
+    now = int(time.time())
+    token = pyjwt.encode(
+        {"sub": "8", "email": "ram0@gmail.com", "role": "patient", "exp": now + 3600},
+        auth_service._get_local_jwt_secret(),
+        algorithm="HS256"
+    )
+
+    with patch.dict("os.environ", {"ENVIRONMENT": "production"}):
+        assert settings.is_production is True
+        with patch.object(auth_service.client.auth, "get_user") as mock_supabase_get_user:
+            mock_supabase_get_user.side_effect = Exception("Invalid token on Supabase")
+            with pytest.raises(Exception, match="Invalid token on Supabase"):
+                auth_service.get_current_user(jwt_token=token)
+            # Ensure client.auth.get_user was indeed called
+            mock_supabase_get_user.assert_called_once_with(token)

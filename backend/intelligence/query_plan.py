@@ -55,6 +55,8 @@ class GenerationStrategy(str, Enum):
     COMPARATIVE_SYNTHESIS = "comparative_synthesis"
     SAFETY_REFUSAL = "safety_refusal"
     OUT_OF_SCOPE_REFUSAL = "out_of_scope_refusal"
+    DIRECT_CONVERSATION = "direct_conversation"
+    EDUCATIONAL_SYNTHESIS = "educational_synthesis"
 
 
 @dataclass

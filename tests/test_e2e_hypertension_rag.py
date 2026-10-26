@@ -83,11 +83,14 @@ def isolate_vector_store(tmp_path, monkeypatch):
     """Isolates vector store storage to temporary directory to prevent modifying production index."""
     from backend.services.vector_store_service import VectorStoreService
     import backend.services.vector_store_service as vss_module
+    import backend.api.rag_router as rr_module
     test_store = VectorStoreService(storage_dir=tmp_path)
     monkeypatch.setattr(vss_module, "_shared_vector_store", test_store)
     monkeypatch.setattr(vss_module, "get_vector_store_service", lambda *a, **k: test_store)
+    rr_module._rag_service_instance = None
     yield test_store
     vss_module._shared_vector_store = None
+    rr_module._rag_service_instance = None
 
 
 def test_authenticated_hypertension_e2e_rag_pipeline():
@@ -153,7 +156,7 @@ def test_authenticated_hypertension_e2e_rag_pipeline():
 
         with patch("backend.services.gemini_service.GeminiService.generate_answer") as mock_gemini:
             mock_gemini.return_value = {
-                "answer": "Hypertension is persistently elevated blood pressure. Risk factors include sodium, age, and inactivity. Lifestyle changes include exercise and low-sodium diet [Source 1].",
+                "answer": "Hypertension is persistently elevated blood pressure [Source 1]. Risk factors include sodium, age, and inactivity [Source 1]. Lifestyle changes include exercise and low-sodium diet [Source 1].",
                 "model": "gemini-flash-latest",
                 "disclaimer": "Medical disclaimer.",
                 "generation_time_ms": 115.0,

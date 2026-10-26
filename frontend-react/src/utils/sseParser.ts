@@ -87,9 +87,11 @@ export async function streamRAGQuery(
               } else if (currentEvent === 'complete' && callbacks.onComplete) {
                 callbacks.onComplete(parsed as RAGQueryResponse);
               } else if (currentEvent === 'error') {
-                const errMsg = parsed.error || 'Server streaming error';
-                if (callbacks.onError) {
-                  callbacks.onError(new Error(errMsg));
+                if (parsed.status !== 'safety_intercepted') {
+                  const errMsg = parsed.error || 'Server streaming error';
+                  if (callbacks.onError) {
+                    callbacks.onError(new Error(errMsg));
+                  }
                 }
               }
             } catch (jsonErr) {

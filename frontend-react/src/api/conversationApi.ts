@@ -1,12 +1,64 @@
 import { apiClient } from './client';
 import { Conversation, ConversationMessage } from '../types';
 
+export function normalizeConversationList(data: unknown): Conversation[] {
+  if (Array.isArray(data)) {
+    return data.filter(
+      (item): item is Conversation =>
+        Boolean(item && typeof item === 'object' && ('id' in item || 'title' in item))
+    );
+  }
+
+  if (data && typeof data === 'object') {
+    const candidate =
+      (data as Record<string, unknown>).conversations ??
+      (data as Record<string, unknown>).items ??
+      (data as Record<string, unknown>).data ??
+      (data as Record<string, unknown>).results;
+
+    if (Array.isArray(candidate)) {
+      return candidate.filter(
+        (item): item is Conversation =>
+          Boolean(item && typeof item === 'object' && ('id' in item || 'title' in item))
+      );
+    }
+  }
+
+  return [];
+}
+
+export function normalizeMessageList(data: unknown): ConversationMessage[] {
+  if (Array.isArray(data)) {
+    return data.filter(
+      (item): item is ConversationMessage =>
+        Boolean(item && typeof item === 'object' && 'id' in item)
+    );
+  }
+
+  if (data && typeof data === 'object') {
+    const candidate =
+      (data as Record<string, unknown>).messages ??
+      (data as Record<string, unknown>).items ??
+      (data as Record<string, unknown>).data ??
+      (data as Record<string, unknown>).results;
+
+    if (Array.isArray(candidate)) {
+      return candidate.filter(
+        (item): item is ConversationMessage =>
+          Boolean(item && typeof item === 'object' && 'id' in item)
+      );
+    }
+  }
+
+  return [];
+}
+
 export const conversationApi = {
   listConversations: async (skip: number = 0, limit: number = 100): Promise<Conversation[]> => {
-    const response = await apiClient.get<Conversation[]>('/conversations', {
+    const response = await apiClient.get<unknown>('/conversations', {
       params: { skip, limit },
     });
-    return response.data;
+    return normalizeConversationList(response.data);
   },
 
   createConversation: async (title: string = 'Healthcare Consultation'): Promise<Conversation> => {
@@ -21,11 +73,11 @@ export const conversationApi = {
     skip: number = 0,
     limit: number = 100
   ): Promise<ConversationMessage[]> => {
-    const response = await apiClient.get<ConversationMessage[]>(
+    const response = await apiClient.get<unknown>(
       `/conversations/${conversationId}/messages`,
       { params: { skip, limit } }
     );
-    return response.data;
+    return normalizeMessageList(response.data);
   },
 
   appendMessage: async (

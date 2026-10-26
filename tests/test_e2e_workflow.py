@@ -82,11 +82,14 @@ def isolate_vector_store(tmp_path, monkeypatch):
     """Isolates vector store storage to temporary directory to prevent modifying production index."""
     from backend.services.vector_store_service import VectorStoreService
     import backend.services.vector_store_service as vss_module
+    import backend.api.rag_router as rr_module
     test_store = VectorStoreService(storage_dir=tmp_path)
     monkeypatch.setattr(vss_module, "_shared_vector_store", test_store)
     monkeypatch.setattr(vss_module, "get_vector_store_service", lambda *a, **k: test_store)
+    rr_module._rag_service_instance = None
     yield test_store
     vss_module._shared_vector_store = None
+    rr_module._rag_service_instance = None
 
 
 def test_complete_e2e_workflow():
@@ -157,7 +160,7 @@ def test_complete_e2e_workflow():
     }
     with patch("backend.services.gemini_service.GeminiService.generate_answer") as mock_gemini:
         mock_gemini.return_value = {
-            "answer": "Patient is diagnosed with Stage 2 Essential Hypertension and blood pressure is 158/96 mmHg.",
+            "answer": "Patient is diagnosed with Stage 2 Essential Hypertension and blood pressure is 158/96 mmHg [Source 1].",
             "model": "gemini-flash-latest",
             "disclaimer": "Informational only.",
             "generation_time_ms": 120.0,

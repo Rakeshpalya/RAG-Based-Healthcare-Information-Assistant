@@ -110,9 +110,15 @@ class ClinicalQueryPlanner:
             return condition_matches[0].strip()
 
         # Fallback: extract key noun phrase after question word
-        clean = re.sub(r'^(what is|what are|what does|how to|how is|tell me about|can you explain|summarize|compare)\s+', '', q)
+        clean = re.sub(r'^(what is|what are|what does|how to|how is|tell me about|can you explain|summarize|compare|give me an overview of|give me a summary of)\s+', '', q)
         clean = re.sub(r'[?!.,]', '', clean).strip()
-        tokens = [w for w in clean.split() if len(w) > 3 and w not in ("dose", "dosage", "report", "document", "test", "result", "recommended", "usually", "prescribed")]
+        meta_stop_words = {
+            "dose", "dosage", "report", "document", "documents", "uploaded", "attached", "provided",
+            "available", "test", "result", "results", "recommended", "usually", "prescribed", "overview",
+            "summary", "paper", "file", "record", "records", "study", "studies", "about", "describe",
+            "details", "information", "topics", "conditions", "findings"
+        }
+        tokens = [w for w in clean.split() if len(w) > 3 and w not in meta_stop_words]
         if tokens:
             return " ".join(tokens[:2])
         return None
@@ -123,11 +129,36 @@ class ClinicalQueryPlanner:
         Generates deterministic, bounded query expansions (max 3-5).
         Never expands safety violations or out-of-scope inquiries.
         """
-        if intent in (ClinicalIntent.EMERGENCY, ClinicalIntent.SELF_HARM, ClinicalIntent.POISONING, ClinicalIntent.OUT_OF_SCOPE):
+        if intent in (
+            ClinicalIntent.EMERGENCY,
+            ClinicalIntent.SELF_HARM,
+            ClinicalIntent.POISONING,
+            ClinicalIntent.OUT_OF_SCOPE,
+            ClinicalIntent.GREETING,
+            ClinicalIntent.GENERAL_CONVERSATION,
+            ClinicalIntent.EDUCATIONAL_QUERY
+        ):
             return []
 
         entity = cls.extract_primary_clinical_entity(query)
         expansions: List[str] = []
+
+        if intent in (ClinicalIntent.DOCUMENT_SUMMARY, ClinicalIntent.DOCUMENT_COMPARISON):
+            if entity:
+                return [
+                    f"{entity} clinical findings assessment recommendations",
+                    f"{entity} diagnosis evaluation management plan",
+                    f"{entity} document overview main topics scope",
+                ]
+            return [
+                "document overview main topics and key findings",
+                "table of contents section headings scope and summary",
+                "patient clinical summary diagnosis findings",
+                "primary assessment clinical findings and treatment plan",
+                "clinical recommendations guidelines and management plan",
+                "lifestyle measures treatment plan and clinical findings",
+                "clinical trial findings and recommendations"
+            ]
 
         if entity and intent in CLINICAL_EXPANSION_TEMPLATES:
             for tmpl in CLINICAL_EXPANSION_TEMPLATES[intent]:
@@ -258,6 +289,51 @@ class ClinicalQueryPlanner:
                 metadata={"plan_reason": "Non-medical query. Retrieval bypassed."}
             )
 
+        # STEP 2.5: GREETINGS & GENERAL EDUCATIONAL QUERIES (Phase 6.10)
+        if intent in (ClinicalIntent.GREETING, ClinicalIntent.GENERAL_CONVERSATION):
+            elapsed_ms = (time.perf_counter() - t0) * 1000.0
+            return QueryPlan(
+                intent=intent,
+                retrieval_required=False,
+                retrieval_strategy=ClinicalRoutingStrategy.DIRECT_CONVERSATION,
+                top_k=0,
+                similarity_threshold=1.0,
+                max_chunks=0,
+                chunk_weighting_strategy=ChunkWeightingStrategy.STANDARD,
+                document_filter_strategy=DocumentFilterStrategy.ALL_AVAILABLE,
+                query_expansion_enabled=False,
+                query_expansions=[],
+                multi_document_strategy=MultiDocumentStrategy.SINGLE_DOCUMENT,
+                context_budget=0,
+                requires_high_confidence_evidence=False,
+                safety_priority=SafetyPriority.NONE,
+                generation_strategy=GenerationStrategy.DIRECT_CONVERSATION,
+                latency_ms=elapsed_ms,
+                metadata={"plan_reason": "Conversational greeting or courtesy. Zero retrieval."}
+            )
+
+        if intent == ClinicalIntent.EDUCATIONAL_QUERY:
+            elapsed_ms = (time.perf_counter() - t0) * 1000.0
+            return QueryPlan(
+                intent=intent,
+                retrieval_required=False,
+                retrieval_strategy=ClinicalRoutingStrategy.EDUCATIONAL_RESPONSE,
+                top_k=0,
+                similarity_threshold=1.0,
+                max_chunks=0,
+                chunk_weighting_strategy=ChunkWeightingStrategy.STANDARD,
+                document_filter_strategy=DocumentFilterStrategy.ALL_AVAILABLE,
+                query_expansion_enabled=False,
+                query_expansions=[],
+                multi_document_strategy=MultiDocumentStrategy.SINGLE_DOCUMENT,
+                context_budget=0,
+                requires_high_confidence_evidence=False,
+                safety_priority=SafetyPriority.NONE,
+                generation_strategy=GenerationStrategy.EDUCATIONAL_SYNTHESIS,
+                latency_ms=elapsed_ms,
+                metadata={"plan_reason": "General AI/educational query. Zero document retrieval."}
+            )
+
         # -------------------------------------------------------------
         # STEP 3: DOCUMENT SCOPING & TENANT FILTERING
         # -------------------------------------------------------------
@@ -365,8 +441,8 @@ class ClinicalQueryPlanner:
                 max_chunks=10,
                 chunk_weighting_strategy=ChunkWeightingStrategy.BROAD_COVERAGE,
                 document_filter_strategy=doc_filter,
-                query_expansion_enabled=False,
-                query_expansions=[],
+                query_expansion_enabled=has_expansions,
+                query_expansions=expansions,
                 multi_document_strategy=MultiDocumentStrategy.MAP_REDUCE,
                 context_budget=4200,
                 requires_high_confidence_evidence=False,
@@ -384,8 +460,8 @@ class ClinicalQueryPlanner:
                 max_chunks=10,
                 chunk_weighting_strategy=ChunkWeightingStrategy.BALANCED_MULTI_DOCUMENT,
                 document_filter_strategy=doc_filter,
-                query_expansion_enabled=False,
-                query_expansions=[],
+                query_expansion_enabled=has_expansions,
+                query_expansions=expansions,
                 multi_document_strategy=MultiDocumentStrategy.BALANCED_DOCUMENT_RETRIEVAL,
                 context_budget=4500,
                 requires_high_confidence_evidence=False,

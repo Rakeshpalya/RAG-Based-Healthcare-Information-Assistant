@@ -27,7 +27,7 @@ export const HistoryPage: React.FC = () => {
     setError(null);
     try {
       const data = await conversationApi.listConversations(0, 100);
-      setConversations(data);
+      setConversations(Array.isArray(data) ? data : []);
     } catch (err: any) {
       setError(err.message || 'Failed to load conversation history.');
     } finally {

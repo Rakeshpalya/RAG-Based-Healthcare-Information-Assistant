@@ -216,7 +216,10 @@ class ClinicalContextEngine:
         r'the\s+condition|the\s+disease|the\s+illness|such\s+condition|same|dosage|dose|'
         r'side\s+effects?|adverse\s+effects?|alternatives?|contraindications?|interactions?|'
         r'first-line|how\s+long|how\s+often|frequency|monitoring|its|their|diet|eat|food|'
-        r'lifestyle|symptoms?)\b',
+        r'lifestyle|symptoms?|'
+        r'(?:first|1st|second|2nd|third|3rd|fourth|4th|last)\s+(?:recommendation|point|item|measure|bullet|step|guideline)|'
+        r'(?:simpler|simple|plain)\s+language|explain\s+(?:that|this|it)|what\s+does\s+(?:that|this|it)\s+mean|'
+        r'(?:summarize|summary\s+of)\s+(?:your\s+)?(?:previous|prior|last|earlier))\b',
         re.IGNORECASE
     )
 
@@ -261,24 +264,34 @@ class ClinicalContextEngine:
         raw_query = raw_text.strip()
         history = conversation_history or []
 
-        # Graceful handling for single-turn requests
-        if not history or not isinstance(history, list) or len(history) == 0:
-            profile = cls._extract_single_turn_profile(raw_query)
-            contraindications: List[str] = []
-            alerts: List[ContraindicationAlert] = []
-            latency = (time.perf_counter() - t0) * 1000.0
-            return TurnContextResolution(
-                original_query=raw_query,
-                effective_query=raw_query,
-                is_follow_up=False,
-                resolved_topic=None,
-                prior_turn_count=0,
-                cumulative_profile=profile,
-                inherited_contraindications=contraindications,
-                contraindication_alerts=alerts,
-                resolution_confidence=1.0,
-                latency_ms=latency
-            )
+        # Check if query is an ordinal reference or recap request requiring clarification when history is empty
+        q_lower = raw_query.lower()
+        has_ordinal = bool(re.search(
+            r'\b(?:the\s+)?(first|1st|second|2nd|third|3rd|fourth|4th|fifth|5th|last)\s+(?:recommendation|point|item|measure|bullet|step|guideline)\b',
+            q_lower
+        ))
+        has_recap = bool(re.search(
+            r'\b(?:summarize|summary\s+of|explain|recap|repeat)\s+(?:your\s+)?(?:previous|prior|last|earlier)\s+(?:answer|response|message|statement|what\s+you\s+(?:just\s+)?said)\b',
+            q_lower
+        ))
+        if (not history or not isinstance(history, list) or len(history) == 0):
+            if not has_ordinal and not has_recap:
+                profile = cls._extract_single_turn_profile(raw_query)
+                contraindications: List[str] = []
+                alerts: List[ContraindicationAlert] = []
+                latency = (time.perf_counter() - t0) * 1000.0
+                return TurnContextResolution(
+                    original_query=raw_query,
+                    effective_query=raw_query,
+                    is_follow_up=False,
+                    resolved_topic=None,
+                    prior_turn_count=0,
+                    cumulative_profile=profile,
+                    inherited_contraindications=contraindications,
+                    contraindication_alerts=alerts,
+                    resolution_confidence=1.0,
+                    latency_ms=latency
+                )
 
         # 1. Bounded Windowing: Restrict to last MAX_WINDOW_TURNS
         bounded_history = cls._bound_history(history)
@@ -309,7 +322,11 @@ class ClinicalContextEngine:
         )
 
         # 5. Determine Inherited Contraindications from Cumulative Profile
-        contraindications, alerts = cls._evaluate_inherited_contraindications(profile)
+        # Strictly evaluates against current query and context to prevent alert spam on unrelated queries
+        contraindications, alerts = cls._evaluate_inherited_contraindications(
+            profile=profile,
+            context_text=f"{raw_query} {effective_query}"
+        )
 
         latency = (time.perf_counter() - t0) * 1000.0
 
@@ -344,7 +361,33 @@ class ClinicalContextEngine:
         if not text:
             return entities
 
+        # Clinical Invariant: Clinical conditions, medications, allergies for cumulative patient profiles
+        # MUST only be extracted from genuine personal disclosures by the patient (role == "user").
+        # Assistant messages summarize literature and must NEVER be treated as patient health records.
+        if role != "user":
+            return entities
+
         text_lower = text.lower()
+
+        # Distinguish objective document inquiries from personal patient disclosures
+        is_document_query = bool(re.search(
+            r'\b(?:what\s+does\s+(?:the|this|my\s+uploaded)|'
+            r'does\s+the|according\s+to|'
+            r'in\s+the\s+(?:uploaded|attached|provided)?\s*(?:document|pdf|file|report|study|paper|guideline)|'
+            r'summarize|summary\s+of|overview\s+of|'
+            r'what\s+are\s+the\s+(?:symptoms|causes|risk\s+factors|complications|treatments)\s+of|'
+            r'tell\s+me\s+about\s+(?:the\s+)?(?:document|study|trial|report))\b',
+            text_lower
+        ))
+        is_personal_disclosure = bool(re.search(
+            r'\b(?:i\s+(?:have|had|am|was|suffer|take|took|experience|got|need)|'
+            r'diagnosed\s+(?:with|as)|diagnosis\s+is|'
+            r'my\s+(?:doctor|physician|diagnosis|condition|medical\s+history|allerg(?:y|ies)|medication|pills?|symptoms?)|'
+            r'patient\s+(?:has|is|was|presented\s+with|diagnosed\s+with))\b',
+            text_lower
+        ))
+        if is_document_query and not is_personal_disclosure:
+            return entities
 
         # Check for global negation in sentence fragments
         sentences = re.split(r'[.!?;\n]+', text)
@@ -527,6 +570,25 @@ class ClinicalContextEngine:
         return cls._assemble_cumulative_profile(entities)
 
     @classmethod
+    def is_clarification_message(cls, text: Optional[str]) -> bool:
+        """Determines if a message is a clarification request rather than substantive clinical findings."""
+        if not text or not isinstance(text, str):
+            return False
+        t = text.strip().lower()
+        if t.startswith("clarification_required:"):
+            return True
+        clarification_patterns = [
+            r'\b(?:could|would|can)\s+you\s+(?:please\s+)?(?:specify|clarify|provide\s+more\s+details?)\b',
+            r'\bplease\s+(?:clarify|specify|select|choose|indicate|provide)\b',
+            r'\bwhich\s+(?:document|aspect|condition|medication|recommendation)\s+(?:would|do)\s+you\b',
+            r'\bto\s+better\s+assist\s+you,\s+could\s+you\b',
+            r'\bthere\s+are\s+no\s+previous\s+messages\b',
+            r'\bprevious\s+message\s+did\s+not\s+clearly\s+identify\b',
+            r'\bprevious\s+message\s+was\s+a\s+clarification\b'
+        ]
+        return any(bool(re.search(pat, t)) for pat in clarification_patterns)
+
+    @classmethod
     def _reformulate_query(
         cls,
         raw_query: str,
@@ -551,6 +613,71 @@ class ClinicalContextEngine:
 
         # Find the most recent focal topic from prior turns
         prior_focal_topic = cls._extract_prior_focal_topic(bounded_history)
+
+        # Check for ordinal references to specific recommendations / points from prior turn
+        # Skip clarification questions so we only inspect real clinical responses
+        last_asst_msg = next(
+            (t.get("content") or t.get("text") or "" for t in reversed(bounded_history)
+             if (t.get("role") == "assistant" or t.get("sender") == "assistant") and not cls.is_clarification_message(t.get("content") or t.get("text") or "")),
+            ""
+        )
+        ordinal_match = re.search(
+            r'\b(?:the\s+)?(first|1st|second|2nd|third|3rd|fourth|4th|fifth|5th|last)\s+(?:recommendation|point|item|measure|bullet|step|guideline)\b',
+            q_lower
+        )
+        if ordinal_match:
+            if not last_asst_msg:
+                return (
+                    True,
+                    "unresolved_ordinal_reference",
+                    "CLARIFICATION_REQUIRED: Could you please specify which recommendation or clinical finding you would like me to explain in simpler language? (I don't have prior recommendations recorded in this consultation session yet.)",
+                    0.99
+                )
+            # First strip disclaimers and notes so they are not treated as recommendations
+            clean_asst_msg = re.sub(r'(?i)(?:MEDICAL\s+)?DISCLAIMER:.*', '', last_asst_msg, flags=re.DOTALL).strip()
+            clean_asst_msg = re.sub(r'(?i)NOTE:\s+This AI.*', '', clean_asst_msg, flags=re.DOTALL).strip()
+
+            parsed_splits = re.split(r'(?:^|\s)(?:\d+[\.\)]|[-*•])\s+', clean_asst_msg)
+            parsed_items = [s.strip() for s in parsed_splits[1:] if s.strip()] if len(parsed_splits) > 1 else []
+            if not parsed_items:
+                parsed_items = [s.strip() for s in re.split(r'[;\n]+', clean_asst_msg) if len(s.strip()) > 10]
+            ord_str = ordinal_match.group(1).lower()
+            ord_map = {"first": 0, "1st": 0, "second": 1, "2nd": 1, "third": 2, "3rd": 2, "fourth": 3, "4th": 3, "fifth": 4, "5th": 4, "last": -1}
+            target_idx = ord_map.get(ord_str, 0)
+            if parsed_items and (0 <= target_idx < len(parsed_items) or target_idx == -1):
+                target_rec = parsed_items[target_idx].strip()
+                target_rec_clean = re.sub(r'\[Source\s+\d+\]', '', target_rec).strip()
+                topic_anchor = "ordinal_recommendation"
+                return True, topic_anchor, f"EXPLAIN_RECOMMENDATION: {target_rec_clean} | CONTEXT: {target_rec}", 0.98
+            else:
+                return (
+                    True,
+                    "unresolved_ordinal_reference",
+                    f"CLARIFICATION_REQUIRED: The previous message did not clearly identify a {ordinal_match.group(1)} recommendation. Could you please specify which recommendation you would like me to explain?",
+                    0.99
+                )
+
+        # Check for meta-conversational requests (e.g. "Summarize your previous answer")
+        is_prev_answer_meta = bool(re.search(
+            r'\b(?:summarize|summary\s+of|explain|recap|repeat)\s+(?:your\s+)?(?:previous|prior|last|earlier)\s+(?:answer|response|message|statement|what\s+you\s+(?:just\s+)?said)\b',
+            q_lower
+        ))
+        if is_prev_answer_meta:
+            if not last_asst_msg:
+                has_any_asst = any((t.get("role") == "assistant" or t.get("sender") == "assistant") for t in bounded_history)
+                if has_any_asst:
+                    clarif_prompt = "CLARIFICATION_REQUIRED: The previous message was a clarification question, not clinical findings. Which clinical document or topic would you like me to summarize?"
+                else:
+                    clarif_prompt = "CLARIFICATION_REQUIRED: There are no previous messages in this conversation session to summarize. Which medical topic or document would you like me to summarize?"
+                return (
+                    True,
+                    "unresolved_previous_answer",
+                    clarif_prompt,
+                    0.99
+                )
+            topic_anchor = prior_focal_topic or "previous_answer"
+            effective = f"Summarize previous response: {last_asst_msg[:300]}"
+            return True, topic_anchor, effective, 0.99
 
         # If it's explicitly elliptical or contains pronouns and lacks its own subject
         is_follow_up = False
@@ -605,6 +732,10 @@ class ClinicalContextEngine:
             if not content:
                 continue
 
+            role = turn.get("role") or turn.get("sender")
+            if (role == "assistant" or role == "ai") and cls.is_clarification_message(content):
+                continue
+
             content_lower = content.lower()
 
             # Check for medication mentions first (most common clinical follow-up target)
@@ -620,10 +751,16 @@ class ClinicalContextEngine:
         return None
 
     @classmethod
-    def _evaluate_inherited_contraindications(cls, profile: CumulativeClinicalProfile) -> Tuple[List[str], List[ContraindicationAlert]]:
+    def _evaluate_inherited_contraindications(
+        cls,
+        profile: CumulativeClinicalProfile,
+        context_text: str = ""
+    ) -> Tuple[List[str], List[ContraindicationAlert]]:
         """
         Evaluates cumulative patient conditions/allergies and exports strict contraindication rules
         and structured ContraindicationAlert objects.
+        Requires active clinical conflict with therapies/medications in context_text before firing
+        to prevent unrelated contraindication spam across healthy conversations.
         """
         contraindications: List[str] = []
         alerts: List[ContraindicationAlert] = []
@@ -631,13 +768,20 @@ class ClinicalContextEngine:
         allergies_lower = {a.lower() for a in profile.confirmed_allergies}
         meds_lower = {m.lower() for m in profile.active_medications}
         risks_lower = {r.lower() for r in profile.risk_factors}
+        context_lower = (context_text or "").lower()
 
         # 1. Renal Contraindications (CKD / Renal Failure / AKI / Nephropathy / Kidney Disease)
         renal_keys = {
             "chronic kidney disease", "ckd", "renal failure", "renal impairment",
             "acute kidney injury", "aki", "kidney disease", "nephropathy", "end stage renal disease", "esrd"
         }
-        if bool(conds_lower & renal_keys):
+        nsaid_keys = {
+            "nsaid", "nsaids", "ibuprofen", "naproxen", "celecoxib", "ketorolac",
+            "diclofenac", "indomethacin", "meloxicam", "advil", "aleve", "motrin", "aspirin"
+        }
+        if bool(conds_lower & renal_keys) and bool(
+            context_lower and any(re.search(rf'\b{re.escape(k)}\b', context_lower) for k in nsaid_keys)
+        ):
             msg = (
                 "Renal Contraindication: Patient has diagnosed renal impairment/CKD. "
                 "NSAIDs (ibuprofen, naproxen, celecoxib) are contraindicated or high-risk for acute decompensation."
@@ -650,7 +794,13 @@ class ClinicalContextEngine:
             ))
 
         # 2. Allergy Contraindications (Penicillin / Sulfa / etc.)
-        if "penicillin" in allergies_lower or "amoxicillin" in allergies_lower:
+        penicillin_keys = {
+            "penicillin", "amoxicillin", "ampicillin", "augmentin", "piperacillin",
+            "beta-lactam", "beta lactam", "antibiotic", "antibiotics"
+        }
+        if ("penicillin" in allergies_lower or "amoxicillin" in allergies_lower) and bool(
+            context_lower and any(re.search(rf'\b{re.escape(k)}\b', context_lower) for k in penicillin_keys)
+        ):
             msg = (
                 "Allergy Contraindication: Confirmed penicillin allergy. "
                 "Beta-lactam antibiotics (penicillins, ampicillin, amoxicillin, augmentin) are strictly contraindicated."
@@ -661,7 +811,10 @@ class ClinicalContextEngine:
                 reason=msg,
                 severity="CRITICAL"
             ))
-        if "sulfa" in allergies_lower or "sulfonamides" in allergies_lower:
+        sulfa_keys = {"sulfa", "sulfonamide", "sulfonamides", "bactrim", "septra", "trimethoprim", "sulfamethoxazole"}
+        if ("sulfa" in allergies_lower or "sulfonamides" in allergies_lower) and bool(
+            context_lower and any(re.search(rf'\b{re.escape(k)}\b', context_lower) for k in sulfa_keys)
+        ):
             msg = (
                 "Allergy Contraindication: Confirmed sulfonamide allergy. "
                 "Sulfamethoxazole/trimethoprim (Bactrim) is strictly contraindicated."
@@ -678,7 +831,10 @@ class ClinicalContextEngine:
             "cirrhosis", "liver cirrhosis", "liver failure", "chronic liver failure",
             "hepatic impairment", "liver disease", "hepatitis"
         }
-        if bool(conds_lower & hepatic_keys):
+        acetaminophen_keys = {"acetaminophen", "tylenol", "paracetamol", "apap"}
+        if bool(conds_lower & hepatic_keys) and bool(
+            context_lower and any(re.search(rf'\b{re.escape(k)}\b', context_lower) for k in acetaminophen_keys)
+        ):
             msg = (
                 "Hepatic Contraindication: Patient has diagnosed liver disease/cirrhosis. "
                 "High-dose acetaminophen (Tylenol) carries severe risk of acute-on-chronic hepatotoxicity."
@@ -691,7 +847,15 @@ class ClinicalContextEngine:
             ))
 
         # 4. Pregnancy / Teratogen Contraindications
-        if "pregnancy" in risks_lower or any("pregnant" in r for r in risks_lower):
+        teratogen_keys = {
+            "lisinopril", "enalapril", "ramipril", "captopril", "benazepril",
+            "losartan", "valsartan", "candesartan", "irbesartan", "olmesartan",
+            "ace inhibitor", "ace inhibitors", "arb", "arbs", "statin", "statins",
+            "atorvastatin", "simvastatin", "rosuvastatin", "blood pressure"
+        }
+        if ("pregnancy" in risks_lower or any("pregnant" in r for r in risks_lower)) and bool(
+            context_lower and any(re.search(rf'\b{re.escape(k)}\b', context_lower) for k in teratogen_keys)
+        ):
             msg = (
                 "Pregnancy Contraindication: Patient is pregnant. "
                 "ACE inhibitors, ARBs, and statins are teratogenic and strictly contraindicated."
@@ -704,7 +868,11 @@ class ClinicalContextEngine:
             ))
 
         # 5. Anticoagulant Bleeding Risk (Warfarin / DOAC + Aspirin / NSAIDs)
-        if "warfarin" in meds_lower or "coumadin" in meds_lower or "apixaban" in meds_lower or "rivaroxaban" in meds_lower:
+        anticoagulant_keys = {"warfarin", "coumadin", "apixaban", "rivaroxaban", "eliquis", "xarelto"}
+        bleeding_keys = {"aspirin", "nsaid", "nsaids", "ibuprofen", "naproxen", "advil", "aleve", "motrin"}
+        if bool(meds_lower & anticoagulant_keys) and bool(
+            context_lower and any(re.search(rf'\b{re.escape(k)}\b', context_lower) for k in bleeding_keys)
+        ):
             msg = (
                 "Anticoagulant Warning: Patient is on anticoagulant therapy (Warfarin/DOAC). "
                 "Concomitant aspirin or NSAIDs significantly elevates gastrointestinal hemorrhage risk."
@@ -717,7 +885,13 @@ class ClinicalContextEngine:
             ))
 
         # 6. Asthma Contraindications
-        if "asthma" in conds_lower:
+        beta_blocker_keys = {
+            "propranolol", "labetalol", "carvedilol", "timolol", "nadolol",
+            "metoprolol", "atenolol", "bisoprolol", "nebivolol", "beta blocker", "beta blockers", "beta-blocker", "beta-blockers"
+        }
+        if "asthma" in conds_lower and bool(
+            context_lower and any(re.search(rf'\b{re.escape(k)}\b', context_lower) for k in beta_blocker_keys)
+        ):
             msg = (
                 "Asthma Contraindication: Patient has asthma. "
                 "Non-selective beta blockers (propranolol, labetalol, carvedilol) may provoke bronchospasm."
@@ -730,7 +904,11 @@ class ClinicalContextEngine:
             ))
 
         # 7. Peptic Ulcer Disease / GI Bleeding
-        if "peptic ulcer disease" in conds_lower or "peptic ulcer" in conds_lower:
+        pud_keys = {"peptic ulcer disease", "peptic ulcer", "gastric ulcer", "stomach ulcer"}
+        pud_nsaid_keys = {"nsaid", "nsaids", "ibuprofen", "naproxen", "aspirin", "advil", "aleve", "motrin", "celecoxib", "ketorolac"}
+        if bool(conds_lower & pud_keys) and bool(
+            context_lower and any(re.search(rf'\b{re.escape(k)}\b', context_lower) for k in pud_nsaid_keys)
+        ):
             msg = (
                 "Gastrointestinal Contraindication: Patient has peptic ulcer disease. "
                 "Systemic NSAIDs and high-dose aspirin carry high risk of gastrointestinal hemorrhage."
