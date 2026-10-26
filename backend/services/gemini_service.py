@@ -20,7 +20,11 @@ logger = logging.getLogger(__name__)
 
 class GeminiServiceError(Exception):
     """Custom application-level exception for Gemini service failures."""
-    pass
+    def __init__(self, message: str, error_type: str = "general", status_code: Optional[int] = None):
+        super().__init__(message)
+        self.message = message
+        self.error_type = error_type
+        self.status_code = status_code
 
 
 class GeminiService:
@@ -361,6 +365,17 @@ class GeminiService:
                         err_msg
                     )
 
+                    is_auth_error = (
+                        status_code in (400, 401, 403)
+                        and any(k in err_msg.lower() for k in ("invalid api key", "api_key_invalid", "api key not valid", "unauthenticated", "permission denied", "not valid"))
+                    )
+                    if is_auth_error:
+                        raise GeminiServiceError(
+                            "Gemini authentication failed: The provided API key is invalid or lacks required permissions.",
+                            error_type="auth_error",
+                            status_code=401
+                        )
+
                     is_transient = (
                         status_code in (503, 429, 504)
                         or "high demand" in str(err_msg).lower()
@@ -402,6 +417,13 @@ class GeminiService:
                         err_msg
                     )
 
+                    if any(k in err_msg.lower() for k in ("invalid api key", "api_key_invalid", "api key not valid", "unauthenticated", "permission denied")):
+                        raise GeminiServiceError(
+                            "Gemini authentication failed: The provided API key is invalid or lacks required permissions.",
+                            error_type="auth_error",
+                            status_code=401
+                        )
+
                     is_transient_exc = any(
                         token in err_msg.lower()
                         for token in ("503", "429", "504", "high demand", "temporarily", "timeout", "deadline")
@@ -418,25 +440,33 @@ class GeminiService:
 
         if last_error:
             err_str = self._sanitize_secret(str(last_error)).lower()
-            is_high_demand = (
-                "503" in err_str
-                or "429" in err_str
-                or "high demand" in err_str
-                or "temporarily" in err_str
-                or "resource exhausted" in err_str
-            )
-            if is_high_demand:
+            if any(k in err_str for k in ("invalid api key", "api_key_invalid", "api key not valid", "unauthenticated", "permission denied")):
                 raise GeminiServiceError(
-                    "The AI generation service is temporarily unavailable due to high demand. "
-                    "Please wait a few moments and try your inquiry again."
+                    "Gemini authentication failed: The provided API key is invalid or lacks required permissions.",
+                    error_type="auth_error",
+                    status_code=401
+                )
+            if "429" in err_str or "resource exhausted" in err_str or "quota" in err_str:
+                raise GeminiServiceError(
+                    "Gemini quota or rate limit exceeded. Please wait a few moments and try your inquiry again.",
+                    error_type="quota_error",
+                    status_code=429
                 )
             if "timeout" in err_str or "deadline" in err_str or "504" in err_str:
                 raise GeminiServiceError(
-                    f"The AI generation service timed out while processing the request: {self._sanitize_secret(str(last_error))}"
+                    "The AI generation service timed out while processing the request.",
+                    error_type="timeout_error",
+                    status_code=504
+                )
+            if "503" in err_str or "high demand" in err_str or "temporarily" in err_str:
+                raise GeminiServiceError(
+                    "The AI generation service is temporarily unavailable due to high demand. Please wait a few moments and try your inquiry again.",
+                    error_type="service_unavailable",
+                    status_code=503
                 )
             raise GeminiServiceError(f"Gemini generation failed across all models: {self._sanitize_secret(str(last_error))}")
 
-        raise GeminiServiceError("The AI generation service is temporarily unavailable. Please try again shortly.")
+        raise GeminiServiceError("The AI generation service is temporarily unavailable. Please try again shortly.", error_type="service_unavailable", status_code=503)
 
     def generate(
         self,

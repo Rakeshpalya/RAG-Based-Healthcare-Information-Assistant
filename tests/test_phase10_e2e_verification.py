@@ -20,7 +20,9 @@ Verifies all 15 required core behaviors:
 16. Tenancy and user isolation -> no cross-user context leakage
 """
 
+import os
 import pytest
+from unittest.mock import MagicMock
 from backend.intelligence.intent_classifier import ClinicalIntentClassifier
 from backend.intelligence.intent_models import ClinicalIntent, ClinicalRoutingStrategy
 from backend.intelligence.query_planner import ClinicalQueryPlanner
@@ -85,7 +87,19 @@ def test_e2e_case_3_general_tech_questions(rag_service):
 
 def test_e2e_case_4_diabetes_symptoms_grounded(rag_service):
     """Case 4: 'What are the symptoms of diabetes?' produces grounded answer with valid citations."""
-    resp = rag_service.generate_rag_answer("What are the symptoms of diabetes?", user_id=8)
+    api_key = os.getenv("GEMINI_API_KEY", "")
+    if not api_key or "mock" in api_key.lower() or "test" in api_key.lower():
+        mock_gemini = MagicMock()
+        mock_gemini.generate_answer.return_value = {
+            "answer": "Common symptoms of diabetes include increased thirst, frequent urination, fatigue, and unexplained weight loss [Source 1].",
+            "model": "gemini-3.5-flash-lite",
+            "disclaimer": "Medical disclaimer",
+            "generation_time_ms": 120.0,
+            "status": "success"
+        }
+        resp = rag_service.generate_rag_answer("What are the symptoms of diabetes?", user_id=8, gemini_service=mock_gemini)
+    else:
+        resp = rag_service.generate_rag_answer("What are the symptoms of diabetes?", user_id=8)
     assert resp["retrieval_status"] == "success"
     assert len(resp["sources"]) > 0
     # Citations must be present and valid

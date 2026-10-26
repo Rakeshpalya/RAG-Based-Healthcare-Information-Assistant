@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { ragApi } from '../../api/ragApi';
+import { normalizeApiError } from '../../api/client';
 import { HealthLogo } from '../common/HealthLogo';
 import { CitationCard } from './CitationCard';
 import { EmergencyBanner } from './EmergencyBanner';
@@ -97,11 +98,26 @@ export const FloatingChatbot: React.FC = () => {
       };
 
       setMessages((prev) => [...prev, assistantMsg]);
-    } catch {
+    } catch (err: unknown) {
+      const apiErr = normalizeApiError(err);
+      let userFriendlyText = 'Sorry, I encountered an issue processing your inquiry. Please try again.';
+
+      if (apiErr.status === 401) {
+        userFriendlyText = 'Your session has expired. Please sign in to continue.';
+      } else if (apiErr.status === 429) {
+        userFriendlyText = 'The assistant is currently handling high request volume. Please wait a moment and try again.';
+      } else if (apiErr.status === 503) {
+        userFriendlyText = apiErr.message || 'The AI service is temporarily unavailable. Please try again in a few moments.';
+      } else if (apiErr.status === 0 || apiErr.message?.toLowerCase().includes('network error') || apiErr.message?.toLowerCase().includes('failed to fetch')) {
+        userFriendlyText = 'Unable to connect to the HealthAI backend service. Please verify the service is running at http://127.0.0.1:8000 and try again.';
+      } else if (apiErr.message) {
+        userFriendlyText = apiErr.message;
+      }
+
       const errorMsg: FloatingMessage = {
         id: `assistant-err-${Date.now()}`,
         sender: 'assistant',
-        text: 'Sorry, I encountered a temporary connection issue. Please verify the service is running and try again.',
+        text: userFriendlyText,
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       };
       setMessages((prev) => [...prev, errorMsg]);

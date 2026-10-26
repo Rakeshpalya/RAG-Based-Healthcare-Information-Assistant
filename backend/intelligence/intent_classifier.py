@@ -167,10 +167,17 @@ CONVERSATIONAL_PATTERNS: List[Tuple[re.Pattern, str]] = [
 
 # Educational & Technology Patterns (Non-medical AI / Tech concepts) (Phase 6.10)
 EDUCATIONAL_TECH_PATTERNS: List[Tuple[re.Pattern, str]] = [
-    (re.compile(r"\b(?:explain\s+(?:ai|artificial\s+intelligence|machine\s+learning|ml|deep\s+learning|python|fastapi|rag|retrieval\s+augmented\s+generation|neural\s+networks?|llms?|large\s+language\s+models?|nlp|transformers?|vector\s+databases?|faiss))\b", re.I), "EDU_TECH_EXPLAIN"),
-    (re.compile(r"\bwhat\s+(?:is|are)\s+(?:ai|artificial\s+intelligence|machine\s+learning|ml|deep\s+learning|python|fastapi|rag|retrieval\s+augmented\s+generation|a\s+neural\s+network|an?\s+api|an?\s+llm|large\s+language\s+models?|vector\s+databases?|nlp)\b", re.I), "EDU_TECH_WHAT_IS"),
-    (re.compile(r"\b(?:tell\s+me\s+about\s+(?:ai|artificial\s+intelligence|machine\s+learning|python|fastapi|rag))\b", re.I), "EDU_TECH_TELL_ME"),
-    (re.compile(r"^(?:explain\s+ai|what\s+is\s+ai|what\s+is\s+machine\s+learning|what\s+is\s+python|explain\s+fastapi|what\s+is\s+rag|explain\s+rag|what\s+is\s+ml)[\s?.!]*$", re.I), "EDU_TECH_DIRECT"),
+    (re.compile(r"\b(?:explain\s+(?:ai|artificial\s+intelligence|machine\s+learning|ml|deep\s+learning|python|fastapi|rag|retrieval\s+augmented\s+generation|neural\s+networks?|llms?|large\s+language\s+models?|nlp|natural\s+language\s+processing|transformers?|vector\s+databases?|faiss))\b", re.I), "EDU_TECH_EXPLAIN"),
+    (re.compile(r"\bwhat\s+(?:is|are)\s+(?:ai|artificial\s+intelligence|machine\s+learning|ml|deep\s+learning|python|fastapi|rag|retrieval\s+augmented\s+generation|a\s+neural\s+network|an?\s+api|an?\s+llm|large\s+language\s+models?|vector\s+databases?|nlp|natural\s+language\s+processing)\b", re.I), "EDU_TECH_WHAT_IS"),
+    (re.compile(r"\b(?:tell\s+me\s+about\s+(?:ai|artificial\s+intelligence|machine\s+learning|python|fastapi|rag|nlp))\b", re.I), "EDU_TECH_TELL_ME"),
+    (re.compile(r"^(?:explain\s+nlp|what\s+is\s+nlp|explain\s+ai|what\s+is\s+ai|what\s+is\s+machine\s+learning|what\s+is\s+python|explain\s+python|explain\s+fastapi|what\s+is\s+fastapi|what\s+is\s+rag|explain\s+rag|what\s+is\s+ml|explain\s+ml)[\s?.!]*$", re.I), "EDU_TECH_DIRECT"),
+]
+
+# General Knowledge & Non-Clinical Educational Inquiries (e.g. places like Tumkur, non-clinical concepts)
+GENERAL_KNOWLEDGE_PATTERNS: List[Tuple[re.Pattern, str]] = [
+    (re.compile(r"\b(?:give\s+(?:me\s+)?(?:some\s+)?(?:info|information|details|overview)\s+(?:about|on|regarding)|tell\s+me\s+about|information\s+about|overview\s+of)\s+([a-zA-Z0-9\s\-]+)", re.I), "GEN_INFO_ABOUT"),
+    (re.compile(r"^(?:give\s+(?:some\s+)?info\s+about\s+[\w\s\-]+|info\s+about\s+[\w\s\-]+)[\s?.!]*$", re.I), "GEN_INFO_DIRECT"),
+    (re.compile(r"\b(?:where\s+is|who\s+is|history\s+of|background\s+of)\s+([a-zA-Z0-9\s\-]+)", re.I), "GEN_WHO_WHERE_HISTORY"),
 ]
 
 
@@ -443,6 +450,22 @@ class ClinicalIntentClassifier:
                         latency_ms=elapsed_ms,
                         recommended_top_k=0,
                         metadata={"reason": "Matched conversational courtesy or status pattern. Zero retrieval."}
+                    )
+
+            for pattern, sig in GENERAL_KNOWLEDGE_PATTERNS:
+                if pattern.search(clean_text):
+                    elapsed_ms = (time.perf_counter() - start_time) * 1000.0
+                    return IntentClassificationResult(
+                        intent=ClinicalIntent.EDUCATIONAL_QUERY,
+                        confidence=0.98,
+                        matched_signals=[sig],
+                        requires_retrieval=False,
+                        requires_document_context=False,
+                        safety_priority=SafetyPriority.NONE,
+                        routing_strategy=ClinicalRoutingStrategy.EDUCATIONAL_RESPONSE,
+                        latency_ms=elapsed_ms,
+                        recommended_top_k=0,
+                        metadata={"reason": "Matched general knowledge / non-clinical educational inquiry. Zero retrieval."}
                     )
 
         # -------------------------------------------------------------

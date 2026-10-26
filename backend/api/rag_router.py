@@ -227,12 +227,10 @@ async def query_rag(
         )
     except GeminiServiceError as gse:
         logger.warning("GeminiServiceError handled cleanly in rag_router: %s", str(gse))
+        fallback_msg = gse.message or "The AI generation service is temporarily unavailable. Please try your inquiry again shortly."
         return RAGQueryResponse(
             question=request.question,
-            answer=(
-                "The AI generation service is temporarily unavailable due to high demand. "
-                "Please wait a few moments and try your inquiry again."
-            ),
+            answer=fallback_msg,
             retrieval_status="service_unavailable",
             sources=[],
             context=None,
@@ -299,10 +297,17 @@ async def stream_rag_query(
             ):
                 payload_json = json.dumps(event_payload, ensure_ascii=False)
                 yield f"event: {event_type}\ndata: {payload_json}\n\n"
+        except GeminiServiceError as gse:
+            logger.warning("GeminiServiceError during SSE streaming: %s", str(gse))
+            err_data = json.dumps({
+                "error": gse.message or "The AI generation service is temporarily unavailable.",
+                "status": "error"
+            })
+            yield f"event: error\ndata: {err_data}\n\n"
         except Exception as exc:
             logger.error("Unhandled exception during SSE streaming: %s", str(exc))
             err_data = json.dumps({
-                "error": "An unexpected error occurred during streaming.",
+                "error": "The AI generation service is temporarily unavailable. Please try your inquiry again shortly.",
                 "status": "error"
             })
             yield f"event: error\ndata: {err_data}\n\n"

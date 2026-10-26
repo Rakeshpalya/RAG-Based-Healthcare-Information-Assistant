@@ -788,12 +788,71 @@ class RAGService:
             "and answer health questions based on your authorized records. How can I assist you today?"
         )
 
-    @staticmethod
-    def generate_educational_response(question: str) -> str:
-        """Generates labeled general educational/AI technical responses without document retrieval."""
+    @classmethod
+    def generate_educational_response(
+        cls,
+        question: str,
+        gemini_service: Optional[Any] = None
+    ) -> str:
+        """
+        Generates labeled general educational/technology/general-knowledge responses using Gemini.
+        Zero FAISS vector store retrieval or embedding model overhead.
+        Clearly labels the answer as general educational information.
+        """
+        prefix = "**[General Educational Information - Not from uploaded clinical documents]**\n\n"
+        q_clean = (question or "").strip()
+
+        system_instruction = (
+            "You are HealthAI Assistant providing helpful, accurate, and objective general educational, "
+            "technical, or geographical information. The user's inquiry does not pertain to their personal "
+            "uploaded medical records. Provide a clear, informative, and well-structured answer. "
+            "For geographical inquiries (such as Tumkur / Tumakuru), provide a well-rounded general overview "
+            "(e.g., location in Karnataka, educational significance, industry, cultural heritage) without "
+            "fabricating live events, real-time status, or current business hours."
+        )
+
+        prompt = f"Please explain or provide information regarding the following topic:\n{q_clean}"
+
+        try:
+            from backend.services.gemini_service import GeminiService
+            service = gemini_service or GeminiService()
+            result_text = service.generate(
+                prompt=prompt,
+                system_instruction=system_instruction,
+                temperature=0.2,
+                max_output_tokens=1024
+            )
+            if result_text and result_text.strip():
+                clean_text = result_text.strip()
+                if not clean_text.startswith("**[General Educational Information"):
+                    return prefix + clean_text
+                return clean_text
+        except Exception as e:
+            logger.warning("Gemini educational generation failed, falling back to curated synthesis: %s", str(e))
+
+        return cls._get_curated_educational_fallback(q_clean)
+
+    @classmethod
+    def _get_curated_educational_fallback(cls, question: str) -> str:
+        """Fallback educational response when external Gemini generation is unavailable or mocked in CI."""
         q = (question or "").strip().lower()
         prefix = "**[General Educational Information - Not from uploaded clinical documents]**\n\n"
 
+        if re.search(r'\btumkur\b|\btumakuru\b', q):
+            return (
+                prefix +
+                "Tumkur (officially Tumakuru) is an industrial and educational city situated approximately 70 kilometers "
+                "northwest of Bengaluru in Karnataka, India. Known as the 'City of Education' (Vidyanagari) and the 'Coconut City' "
+                "(Kalpataru Nadu), it hosts major academic and technical institutions, historical pilgrimage sites like "
+                "Siddaganga Math, and significant industrial manufacturing corridors."
+            )
+        if re.search(r'\bnlp\b|\bnatural\s+language\s+processing\b', q):
+            return (
+                prefix +
+                "Natural Language Processing (NLP) is a branch of artificial intelligence and computational linguistics "
+                "that enables computers to understand, interpret, and generate human language. In healthcare, NLP powers "
+                "clinical document parsing, electronic health record (EHR) extraction, medical coding, and automated conversational assistants."
+            )
         if re.search(r'\b(?:artificial\s+intelligence|\bai\b)', q):
             return (
                 prefix +
@@ -836,8 +895,8 @@ class RAGService:
 
         return (
             prefix +
-            f"This is a general educational inquiry regarding '{question}'. While I am a specialized medical assistant designed to analyze "
-            "clinical records, general non-medical technical concepts are answered for educational context and are not derived from your uploaded healthcare documents."
+            f"This is general educational information regarding '{question}'. General non-medical concepts are provided for "
+            "educational context and are not derived from your uploaded healthcare documents."
         )
 
     @classmethod
@@ -2125,7 +2184,7 @@ class RAGService:
                 }
 
             if intent_result.intent == ClinicalIntent.EDUCATIONAL_QUERY:
-                edu_text = self.generate_educational_response(question)
+                edu_text = self.generate_educational_response(question, gemini_service=gemini_service)
                 StructuredRAGLogger.emit_rag_log(RAGStructuredLogEvent(
                     request_id=trace_id,
                     query=question or "",
@@ -3751,7 +3810,7 @@ class RAGService:
                 return
 
             if intent_result.intent == ClinicalIntent.EDUCATIONAL_QUERY:
-                edu_text = self.generate_educational_response(question)
+                edu_text = self.generate_educational_response(question, gemini_service=gemini_service)
                 yield ("token", {"token": edu_text, "index": 0})
                 yield ("complete", {
                     "request_id": trace_id,
