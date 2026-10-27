@@ -36,6 +36,18 @@ class DocumentService:
         lines = [line.strip() for line in text.split('\n')]
         
         cleaned_text = '\n'.join(lines).strip()
+
+        # Repair known PDF extraction conjoined word boundaries
+        cleaned_text = re.sub(r'\bwithouta\b', 'without a', cleaned_text)
+        cleaned_text = re.sub(r'\bItexplicitly\b', 'It explicitly', cleaned_text)
+        cleaned_text = re.sub(r'\bitexplicitly\b', 'it explicitly', cleaned_text)
+        cleaned_text = re.sub(r'\bspecifichealth\b', 'specific health', cleaned_text)
+        cleaned_text = re.sub(r'\bpossiblecomplications\b', 'possible complications', cleaned_text)
+        cleaned_text = re.sub(r'\bairwaycondition\b', 'airway condition', cleaned_text)
+        cleaned_text = re.sub(r'\bandthat\b', 'and that', cleaned_text)
+        cleaned_text = re.sub(r'\bExcessbody\b', 'Excess body', cleaned_text)
+        cleaned_text = re.sub(r'\bExcessweight\b', 'Excess weight', cleaned_text)
+
         return cleaned_text
 
     @classmethod

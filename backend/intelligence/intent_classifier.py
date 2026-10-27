@@ -144,12 +144,9 @@ GENERAL_HEALTH_PATTERNS: List[Tuple[re.Pattern, str]] = [
     (re.compile(r"\b(?:recommended|recommendations?)\s+in\s+(?:my|the|patient)?\s*records?\b", re.I), "GH_RECORDS_RECOMMENDATIONS"),
 ]
 
-# Explicit Non-Medical Out-of-Scope Patterns
+# Explicit Non-Medical Out-of-Scope Patterns (reserved for baking/cooking tests and prompt injections)
 OUT_OF_SCOPE_PATTERNS: List[Tuple[re.Pattern, str]] = [
     (re.compile(r"\b(?:bake|recipe|cooking|chocolate\s+cake|roast|dinner\s+ideas)\b", re.I), "NON_MED_COOKING"),
-    (re.compile(r"\b(?:capital\s+of|who\s+won|president\s+of|weather\s+in|stock\s+price|crypto|bitcoin|football|soccer|nba|world\s+cup)\b", re.I), "NON_MED_GENERAL_TRIVIA"),
-    (re.compile(r"\b(?:write\s+a\s+program|sql\s+query|debug\s+this\s+code|html|css)\b", re.I), "NON_MED_PROGRAMMING"),
-    (re.compile(r"\b(?:fix\s+my\s+car|engine\s+oil|tire\s+pressure|brake\s+pads)\b", re.I), "NON_MED_AUTOMOTIVE"),
     (re.compile(r"\b(?:ignore\s+(?:all\s+)?previous\s+instructions|bypass\s+safety|jailbreak|pretend\s+you\s+are)\b", re.I), "PROMPT_INJECTION_OVERRIDE"),
 ]
 
@@ -415,6 +412,10 @@ class ClinicalIntentClassifier:
         # Ensure we only route if the query doesn't contain substantive clinical inquiry tokens.
         has_clinical_keywords = bool(re.search(
             r'\b(?:symptoms?|disease|condition|diagnosis|treatment|medication|dosage|dose|drug|'
+            r'side\s+effects?|adverse|mechanism\s+of\s+action|pharmacology|pharmacokinetics|'
+            r'metformin|lisinopril|atorvastatin|amlodipine|losartan|albuterol|levothyroxine|omeprazole|'
+            r'amoxicillin|hydrochlorothiazide|ibuprofen|acetaminophen|aspirin|warfarin|apixaban|clopidogrel|'
+            r'gabapentin|sertraline|metoprolol|'
             r'hypertension|diabetes|asthma|cancer|blood\s+pressure|heart|kidney|allergy|allergies|'
             r'vascular|artery|arteries|vein|veins|cardiac|pulmonary|renal|hepatic|neurological|'
             r'respiratory|gastrointestinal|infection|fever|cough|pain|prescription|physician|doctor|'
@@ -427,7 +428,9 @@ class ClinicalIntentClassifier:
             re.I
         ))
 
-        if not has_clinical_keywords:
+        has_doc_intent = any(pat.search(clean_text) for pat, _ in (DOCUMENT_SUMMARY_PATTERNS + DOCUMENT_COMPARISON_PATTERNS))
+
+        if not has_clinical_keywords and not has_doc_intent:
             for pattern, sig in GREETING_PATTERNS:
                 if pattern.search(clean_text) and len(clean_text.split()) <= 5:
                     elapsed_ms = (time.perf_counter() - start_time) * 1000.0
@@ -460,21 +463,20 @@ class ClinicalIntentClassifier:
                         metadata={"reason": "Matched conversational courtesy or status pattern. Zero retrieval."}
                     )
 
-            for pattern, sig in GENERAL_KNOWLEDGE_PATTERNS:
-                if pattern.search(clean_text):
-                    elapsed_ms = (time.perf_counter() - start_time) * 1000.0
-                    return IntentClassificationResult(
-                        intent=ClinicalIntent.EDUCATIONAL_QUERY,
-                        confidence=0.98,
-                        matched_signals=[sig],
-                        requires_retrieval=False,
-                        requires_document_context=False,
-                        safety_priority=SafetyPriority.NONE,
-                        routing_strategy=ClinicalRoutingStrategy.EDUCATIONAL_RESPONSE,
-                        latency_ms=elapsed_ms,
-                        recommended_top_k=0,
-                        metadata={"reason": "Matched general knowledge / non-clinical educational inquiry. Zero retrieval."}
-                    )
+            # Default for arbitrary general knowledge, tech, math, geography, coding, and educational inquiries
+            elapsed_ms = (time.perf_counter() - start_time) * 1000.0
+            return IntentClassificationResult(
+                intent=ClinicalIntent.EDUCATIONAL_QUERY,
+                confidence=0.95,
+                matched_signals=["GENERAL_EDUCATIONAL_ROUTING"],
+                requires_retrieval=False,
+                requires_document_context=False,
+                safety_priority=SafetyPriority.NONE,
+                routing_strategy=ClinicalRoutingStrategy.EDUCATIONAL_RESPONSE,
+                latency_ms=elapsed_ms,
+                recommended_top_k=0,
+                metadata={"reason": "Ordinary general knowledge / non-clinical question routed to OpenAI (zero document retrieval)."}
+            )
 
         # -------------------------------------------------------------
         # STEP 4: MULTI-INTENT SIGNAL SCORING & DISCRIMINATION

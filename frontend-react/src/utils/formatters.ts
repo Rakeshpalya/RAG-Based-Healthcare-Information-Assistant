@@ -53,6 +53,13 @@ export function formatAssistantText(text?: string | null): string {
   // 2. Conjoined words and punctuation fixes
   cleaned = cleaned.replace(/([a-z0-9\]\)])([.!?])([A-Z])/g, '$1$2 $3');
   cleaned = cleaned.replace(/([a-z0-9\]\)])([,;:])([A-Za-z])/g, '$1$2 $3');
+  cleaned = cleaned.replace(/\bwithouta\b/g, 'without a');
+  cleaned = cleaned.replace(/\bItexplicitly\b/g, 'It explicitly');
+  cleaned = cleaned.replace(/\bitexplicitly\b/g, 'it explicitly');
+  cleaned = cleaned.replace(/\bspecifichealth\b/g, 'specific health');
+  cleaned = cleaned.replace(/\bpossiblecomplications\b/g, 'possible complications');
+  cleaned = cleaned.replace(/\bairwaycondition\b/g, 'airway condition');
+  cleaned = cleaned.replace(/\bandthat\b/g, 'and that');
   cleaned = cleaned.replace(/\bExcessbody\b/g, 'Excess body');
   cleaned = cleaned.replace(/\bExcessweight\b/g, 'Excess weight');
 
@@ -60,8 +67,10 @@ export function formatAssistantText(text?: string | null): string {
   cleaned = cleaned.replace(/([.:;!?\n])\s*([*\-•])(?!\*)\s*/g, '$1\n$2 ');
   cleaned = cleaned.replace(/([.:;!?\n])\s*(\d+[\.\)])\s*/g, '$1\n$2 ');
   cleaned = cleaned.replace(/([^\n\s])\s*([•])\s*/g, '$1\n$2 ');
-  cleaned = cleaned.replace(/([^\n\s])\s+([*\-])(?!\*)\s*([A-Za-z0-9])/g, '$1\n$2 $3');
-  cleaned = cleaned.replace(/([a-z0-9])\s*([*\-])(?!\*)\s*([A-Za-z0-9]+)/g, '$1\n$2 $3');
+  cleaned = cleaned.replace(/([^\n\s])\s+\*(?!\*)\s*([A-Za-z0-9])/g, '$1\n* $2');
+  cleaned = cleaned.replace(/([^\n\s])\s+-\s+([A-Za-z0-9])/g, '$1\n- $2');
+  cleaned = cleaned.replace(/([a-z0-9])\s*-\s*([A-Z][a-zA-Z]+)/g, '$1\n- $2');
+  cleaned = cleaned.replace(/(\b[a-zA-Z]+)\s*\n\s*-\s*([a-z0-9]+\b)/g, '$1-$2');
 
   // 4. Clean empty bullet lines
   cleaned = cleaned.replace(/^\s*[-*•](?:\s+[-*•])*\s*$/gm, '');
@@ -70,3 +79,4 @@ export function formatAssistantText(text?: string | null): string {
   return cleaned.trim();
 }
 
+export const fixConjoinedWords = formatAssistantText;

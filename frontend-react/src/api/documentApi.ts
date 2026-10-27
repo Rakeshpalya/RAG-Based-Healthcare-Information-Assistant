@@ -66,4 +66,14 @@ export const documentApi = {
     );
     return response.data;
   },
+
+  summarizeDocument: async (
+    documentId: number | string,
+    formatInstructions?: string
+  ): Promise<any> => {
+    const response = await apiClient.post(`/documents/${documentId}/summarize`, {
+      format_instructions: formatInstructions,
+    });
+    return response.data;
+  },
 };

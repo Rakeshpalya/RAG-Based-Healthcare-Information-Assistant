@@ -139,6 +139,29 @@ class Settings:
         "gpt-4o-mini"
     )
 
+    OPENAI_TEMPERATURE: float = float(
+        os.getenv("OPENAI_TEMPERATURE", "0.0")
+    )
+
+    OPENAI_MAX_OUTPUT_TOKENS: int = int(
+        os.getenv("OPENAI_MAX_OUTPUT_TOKENS", "1024")
+    )
+
+    OPENAI_TIMEOUT_SECONDS: float = float(
+        os.getenv("OPENAI_TIMEOUT_SECONDS", "30.0")
+    )
+
+    @classmethod
+    def validate_openai_api_key(cls) -> str:
+        """Validates and returns the backend OpenAI API key securely."""
+        key = os.getenv("OPENAI_API_KEY", cls.OPENAI_API_KEY)
+        if not key or not str(key).strip():
+            raise ValueError(
+                "OPENAI_API_KEY is not configured. "
+                "Please configure a valid OpenAI API key in your .env file."
+            )
+        return str(key).strip()
+
     # --------------------------------------------------------
     # RAG Retrieval Settings
     # --------------------------------------------------------
@@ -527,6 +550,11 @@ class Settings:
         cls.REDIS_PASSWORD = os.getenv("REDIS_PASSWORD", None)
         cls.SUPABASE_URL = normalize_supabase_url(os.getenv("SUPABASE_URL"))
         cls.SUPABASE_PUBLISHABLE_KEY = os.getenv("SUPABASE_PUBLISHABLE_KEY")
+        cls.OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+        cls.OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-4o-mini")
+        cls.OPENAI_TEMPERATURE = float(os.getenv("OPENAI_TEMPERATURE", "0.0"))
+        cls.OPENAI_MAX_OUTPUT_TOKENS = int(os.getenv("OPENAI_MAX_OUTPUT_TOKENS", "1024"))
+        cls.OPENAI_TIMEOUT_SECONDS = float(os.getenv("OPENAI_TIMEOUT_SECONDS", "30.0"))
 
     # ========================================================
     # Production Configuration Validation (Phase 9)

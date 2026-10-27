@@ -71,9 +71,16 @@ def clean_ai_markdown(text: Optional[str]) -> str:
     cleaned = re.sub(r'([A-Za-z0-9])(\[(?:Source\s+\d+|[Ss]ources?\b))', r'\1 \2', cleaned)
     cleaned = re.sub(r'(\[(?:Source\s+\d+|[Ss]ources?\b[^\]]*)\])([.,;:!?])?([A-Za-z0-9])', r'\1\2 \3', cleaned)
 
-    # 11. Normalize punctuation spacing where words or sentences were accidentally conjoined
+    # 11. Normalize punctuation spacing and fix known word-spacing conjoined words
     cleaned = re.sub(r'([a-z0-9\]\)])([.!?])([A-Z])', r'\1\2 \3', cleaned)
     cleaned = re.sub(r'([a-z0-9\]\)])([,;:])([A-Za-z])', r'\1\2 \3', cleaned)
+    cleaned = re.sub(r'\bwithouta\b', 'without a', cleaned)
+    cleaned = re.sub(r'\bItexplicitly\b', 'It explicitly', cleaned)
+    cleaned = re.sub(r'\bitexplicitly\b', 'it explicitly', cleaned)
+    cleaned = re.sub(r'\bspecifichealth\b', 'specific health', cleaned)
+    cleaned = re.sub(r'\bpossiblecomplications\b', 'possible complications', cleaned)
+    cleaned = re.sub(r'\bairwaycondition\b', 'airway condition', cleaned)
+    cleaned = re.sub(r'\bandthat\b', 'and that', cleaned)
     cleaned = re.sub(r'\bExcessbody\b', 'Excess body', cleaned)
     cleaned = re.sub(r'\bExcessweight\b', 'Excess weight', cleaned)
 
@@ -81,8 +88,10 @@ def clean_ai_markdown(text: Optional[str]) -> str:
     cleaned = re.sub(r'([.!?:\n])\s*([*\-•])(?!\*)\s*', r'\1\n\2 ', cleaned)
     cleaned = re.sub(r'([.!?:\n])\s*(\d+[\.\)])\s*', r'\1\n\2 ', cleaned)
     cleaned = re.sub(r'([^\n\s])\s*([•])\s*', r'\1\n\2 ', cleaned)
-    cleaned = re.sub(r'([^\n\s])\s+([*\-])(?!\*)\s*([A-Za-z0-9])', r'\1\n\2 \3', cleaned)
-    cleaned = re.sub(r'([a-z0-9])\s*([*\-])(?!\*)\s*([A-Za-z0-9]+)', r'\1\n\2 \3', cleaned)
+    cleaned = re.sub(r'([^\n\s])\s+\*(?!\*)\s*([A-Za-z0-9])', r'\1\n* \2', cleaned)
+    cleaned = re.sub(r'([^\n\s])\s+-\s+([A-Za-z0-9])', r'\1\n- \2', cleaned)
+    cleaned = re.sub(r'([a-z0-9])\s*-\s*([A-Z][a-zA-Z]+)', r'\1\n- \2', cleaned)
+    cleaned = re.sub(r'(\b[a-zA-Z]+)\s*\n\s*-\s*([a-z0-9]+\b)', r'\1-\2', cleaned)
 
     # 13. Remove empty orphan bullet points and leftover artifact markers
     cleaned = re.sub(r'^\s*[-*•](?:\s+[-*•])*\s*$', '', cleaned, flags=re.MULTILINE)

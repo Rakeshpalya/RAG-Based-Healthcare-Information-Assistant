@@ -14,6 +14,8 @@ import {
   ChevronLeft,
   ChevronRight,
   Clock,
+  FileText,
+  X,
 } from 'lucide-react';
 
 export const ChatPage: React.FC = () => {
@@ -21,6 +23,13 @@ export const ChatPage: React.FC = () => {
   const { status: healthStatus } = useHealth();
 
   const conversationIdParam = searchParams.get('id');
+  const documentIdParam = searchParams.get('document_id');
+  const actionParam = searchParams.get('action');
+  const filenameParam = searchParams.get('filename');
+
+  const [selectedDocumentId, setSelectedDocumentId] = useState<string | null>(documentIdParam);
+  const [selectedDocumentName, setSelectedDocumentName] = useState<string | null>(filenameParam);
+  const autoSummarizeTriggered = useRef(false);
 
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [activeConversationId, setActiveConversationId] = useState<number | null>(
@@ -180,6 +189,7 @@ export const ChatPage: React.FC = () => {
           top_k: 5,
           similarity_threshold: 0.25,
           conversation_history: historyPayload,
+          document_id: selectedDocumentId || undefined,
         },
         {
           onStart: () => {
@@ -210,6 +220,7 @@ export const ChatPage: React.FC = () => {
                 top_k: 5,
                 similarity_threshold: 0.25,
                 conversation_history: historyPayload,
+                document_id: selectedDocumentId || undefined,
               });
               accumulatedAnswer = syncResp.answer;
               finalSources = syncResp.sources || [];
@@ -275,6 +286,15 @@ export const ChatPage: React.FC = () => {
       abortControllerRef.current = null;
     }
   };
+
+  // Auto-summarize trigger when navigating with ?action=summarize
+  useEffect(() => {
+    if (actionParam === 'summarize' && documentIdParam && !autoSummarizeTriggered.current) {
+      autoSummarizeTriggered.current = true;
+      const cleanName = filenameParam ? filenameParam.replace(/^[0-9a-fA-F-]+_/, '').replace('.pdf', '') : `document ${documentIdParam}`;
+      handleSendMessage(`Summarize ${cleanName} in five bullet points.`);
+    }
+  }, [actionParam, documentIdParam, filenameParam]);
 
   return (
     <div className="flex h-[calc(100vh-4rem-2.25rem)] overflow-hidden bg-slate-50">
@@ -352,6 +372,28 @@ export const ChatPage: React.FC = () => {
           >
             <ChevronRight className="w-4 h-4" />
           </button>
+        )}
+
+        {/* Scoped Document Scoping Banner */}
+        {selectedDocumentId && (
+          <div className="flex items-center justify-between px-4 py-2 bg-sky-50 border-b border-sky-100 text-xs text-sky-800 shrink-0">
+            <div className="flex items-center gap-2 truncate">
+              <FileText className="w-4 h-4 text-sky-600 shrink-0" />
+              <span className="font-semibold">Scoped Document:</span>
+              <span className="truncate">{selectedDocumentName || `Document #${selectedDocumentId}`}</span>
+            </div>
+            <button
+              onClick={() => {
+                setSelectedDocumentId(null);
+                setSelectedDocumentName(null);
+              }}
+              className="inline-flex items-center gap-1 text-sky-600 hover:text-sky-900 font-medium ml-3 hover:underline shrink-0"
+              title="Clear document scoping"
+            >
+              <X className="w-3.5 h-3.5" />
+              <span>Clear Scope</span>
+            </button>
+          </div>
         )}
 
         {/* Scrollable Message Thread */}

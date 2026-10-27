@@ -185,6 +185,7 @@ async def query_rag(
     5. Returns grounded answer with structured source metadata, timings, request_id, and medical disclaimer.
     """
     from backend.services.gemini_service import GeminiServiceError
+    from backend.services.openai_service import OpenAIServiceError
     from backend.evaluation.observability import generate_request_id
 
     user_id = current_user.id if isinstance(current_user, User) else None
@@ -229,9 +230,9 @@ async def query_rag(
             intent=result.get("intent"),
             dialogue_context=result.get("dialogue_context")
         )
-    except GeminiServiceError as gse:
-        logger.warning("GeminiServiceError handled cleanly in rag_router: %s", str(gse))
-        fallback_msg = gse.message or "The AI generation service is temporarily unavailable. Please try your inquiry again shortly."
+    except (GeminiServiceError, OpenAIServiceError) as gse:
+        logger.warning("AI service error handled cleanly in rag_router: %s", str(gse))
+        fallback_msg = getattr(gse, "message", str(gse)) or "The AI generation service is temporarily unavailable. Please try your inquiry again shortly."
         return RAGQueryResponse(
             question=request.question,
             answer=fallback_msg,
@@ -301,10 +302,10 @@ async def stream_rag_query(
             ):
                 payload_json = json.dumps(event_payload, ensure_ascii=False)
                 yield f"event: {event_type}\ndata: {payload_json}\n\n"
-        except GeminiServiceError as gse:
-            logger.warning("GeminiServiceError during SSE streaming: %s", str(gse))
+        except (GeminiServiceError, OpenAIServiceError) as gse:
+            logger.warning("AI service error during SSE streaming: %s", str(gse))
             err_data = json.dumps({
-                "error": gse.message or "The AI generation service is temporarily unavailable.",
+                "error": getattr(gse, "message", str(gse)) or "The AI generation service is temporarily unavailable.",
                 "status": "error"
             })
             yield f"event: error\ndata: {err_data}\n\n"

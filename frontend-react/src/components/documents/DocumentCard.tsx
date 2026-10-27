@@ -1,15 +1,21 @@
 import React from 'react';
 import { DocumentRecord } from '../../types';
 import { cleanDocumentName, formatFileSize, formatDate } from '../../utils/formatters';
-import { FileText, Trash2, Layers, CheckCircle2, AlertTriangle } from 'lucide-react';
+import { FileText, Trash2, Layers, CheckCircle2, AlertTriangle, Sparkles } from 'lucide-react';
 
 interface DocumentCardProps {
   doc: DocumentRecord;
   onDelete: (id: number) => void;
+  onSummarize?: (doc: DocumentRecord) => void;
   isDeleting?: boolean;
 }
 
-export const DocumentCard: React.FC<DocumentCardProps> = ({ doc, onDelete, isDeleting = false }) => {
+export const DocumentCard: React.FC<DocumentCardProps> = ({
+  doc,
+  onDelete,
+  onSummarize,
+  isDeleting = false,
+}) => {
   const displayName = cleanDocumentName(doc.filename);
 
   return (
@@ -58,19 +64,33 @@ export const DocumentCard: React.FC<DocumentCardProps> = ({ doc, onDelete, isDel
         </div>
       </div>
 
-      {/* Footer: Date & Delete button */}
+      {/* Footer: Date & Action buttons */}
       <div className="flex items-center justify-between pt-3 mt-3 border-t border-slate-100 text-[11px] text-slate-400">
         <span>Uploaded {formatDate(doc.created_at)}</span>
-        <button
-          type="button"
-          onClick={() => onDelete(doc.id)}
-          disabled={isDeleting}
-          className="inline-flex items-center gap-1 text-slate-500 hover:text-rose-600 p-1 rounded hover:bg-rose-50 transition-colors disabled:opacity-50"
-          title="Delete document and remove indexed chunks"
-        >
-          <Trash2 className="w-3.5 h-3.5" />
-          <span>Delete</span>
-        </button>
+        <div className="flex items-center gap-2">
+          {onSummarize && (
+            <button
+              type="button"
+              onClick={() => onSummarize(doc)}
+              className="inline-flex items-center gap-1 text-sky-600 hover:text-sky-700 font-medium px-2 py-1 rounded-md bg-sky-50 hover:bg-sky-100 transition-colors"
+              title="Generate document summary"
+              data-testid="summarize-doc-btn"
+            >
+              <Sparkles className="w-3.5 h-3.5" />
+              <span>Summarize</span>
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={() => onDelete(doc.id)}
+            disabled={isDeleting}
+            className="inline-flex items-center gap-1 text-slate-500 hover:text-rose-600 p-1 rounded hover:bg-rose-50 transition-colors disabled:opacity-50"
+            title="Delete document and remove indexed chunks"
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+            <span>Delete</span>
+          </button>
+        </div>
       </div>
     </div>
   );

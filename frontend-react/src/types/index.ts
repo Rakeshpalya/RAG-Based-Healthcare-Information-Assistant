@@ -123,6 +123,7 @@ export interface RAGQueryRequest {
     role: 'user' | 'assistant';
     content: string;
   }>;
+  document_id?: string | number | null;
 }
 
 export interface RAGQueryResponse {

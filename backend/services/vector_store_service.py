@@ -1,4 +1,5 @@
 import os
+import re
 import json
 from pathlib import Path
 from typing import List, Dict, Any, Union, Optional
@@ -186,31 +187,21 @@ class VectorStoreService:
         self,
         query_embedding: Union[List[float], np.ndarray],
         top_k: int = 5,
-        user_id: Optional[int] = None
+        user_id: Optional[int] = None,
+        document_id: Optional[Union[str, int]] = None
     ) -> List[Dict[str, Any]]:
         """
         Performs cosine similarity search against the FAISS index using a query embedding vector,
-        with optional user ownership isolation filtering.
+        with optional user ownership isolation and strict document_id filtering.
 
         Args:
             query_embedding: 384-dimensional query vector.
             top_k: Maximum number of most similar results to retrieve (default: 5).
             user_id: Optional user ID to isolate retrieval to documents owned by that user.
+            document_id: Optional document ID or filename to isolate retrieval strictly to that document.
 
         Returns:
-            List of ranked results sorted from highest similarity to lowest similarity:
-            [
-                {
-                    "chunk_id": str,
-                    "text": str,
-                    "similarity_score": float,
-                    "document_id": Optional[str],
-                    "page_number": Optional[int],
-                    "user_id": Optional[int],
-                    "metadata": Dict[str, Any]
-                },
-                ...
-            ]
+            List of ranked results sorted from highest similarity to lowest similarity.
         """
         if query_embedding is None or len(query_embedding) == 0:
             return []
@@ -232,8 +223,8 @@ class VectorStoreService:
         # L2-normalize query vector for cosine similarity
         faiss.normalize_L2(query_np)
 
-        # Expand candidate pool if user filtering is enabled or to prevent duplicate vector monopolization
-        if user_id is not None:
+        # Expand candidate pool if user or document filtering is enabled
+        if user_id is not None or document_id is not None:
             k = self.count()
         else:
             k = min(self.count(), max(int(top_k) * 15, 300))
@@ -242,6 +233,8 @@ class VectorStoreService:
 
         seen_candidates: set = set()
         results: List[Dict[str, Any]] = []
+        target_doc = str(document_id).strip().lower() if document_id is not None and str(document_id).strip() else None
+
         if len(indices) > 0:
             for score, idx in zip(scores[0], indices[0]):
                 if idx < 0 or idx >= len(self.metadata_store):
@@ -257,6 +250,17 @@ class VectorStoreService:
                     if rec_user_id is not None and str(rec_user_id) != str(user_id):
                         continue
 
+                # Apply strict document isolation:
+                # When document_id is provided, exclude chunks from any other document.
+                if target_doc is not None:
+                    rec_doc_id = str(record.get("document_id") or "").strip().lower()
+                    rec_meta_doc_id = str(record.get("metadata", {}).get("document_id") or "").strip().lower()
+                    rec_filename = str(record.get("metadata", {}).get("filename") or "").strip().lower()
+                    if (rec_doc_id != target_doc and
+                        rec_meta_doc_id != target_doc and
+                        rec_filename != target_doc and
+                        not rec_filename.endswith(target_doc)):
+                        continue
 
                 # Ensure candidate pool is not monopolized by identical duplicate chunk vectors within the same document
                 c_norm = " ".join(record.get("text", "").strip().split())
@@ -280,11 +284,61 @@ class VectorStoreService:
 
         return results
 
+    def get_document_chunks(
+        self,
+        document_id: Union[str, int],
+        user_id: Optional[int] = None
+    ) -> List[Dict[str, Any]]:
+        """
+        Retrieves all indexed chunks belonging strictly to a specific document,
+        preserving original document reading order (page_number, chunk_id).
+        Enforces user ownership isolation if user_id is provided.
+        """
+        target = str(document_id).strip().lower()
+        matching_chunks = []
+        for record in self.metadata_store:
+            rec_doc_id = str(record.get("document_id") or "").strip().lower()
+            rec_meta_doc_id = str(record.get("metadata", {}).get("document_id") or "").strip().lower()
+            rec_filename = str(record.get("metadata", {}).get("filename") or "").strip().lower()
+
+            if (rec_doc_id == target or
+                rec_meta_doc_id == target or
+                rec_filename == target or
+                rec_filename.endswith(target)):
+                if user_id is not None:
+                    rec_user_id = record.get("user_id")
+                    if rec_user_id is None:
+                        rec_user_id = record.get("metadata", {}).get("user_id")
+                    if rec_user_id is not None and str(rec_user_id) != str(user_id):
+                        continue
+                matching_chunks.append({
+                    "chunk_id": record["chunk_id"],
+                    "text": record["text"],
+                    "similarity_score": 1.0,
+                    "document_id": record["document_id"],
+                    "page_number": record["page_number"],
+                    "user_id": record.get("user_id"),
+                    "metadata": record["metadata"]
+                })
+
+        # Sort by page_number (treating None as 1) and chunk_id
+        def sort_key(c):
+            p = c.get("page_number")
+            p_val = p if isinstance(p, (int, float)) else 1
+            cid = str(c.get("chunk_id", ""))
+            m = re.search(r'\d+$', cid)
+            cid_num = int(m.group(0)) if m else 0
+            return (p_val, cid_num)
+
+        matching_chunks.sort(key=sort_key)
+        return matching_chunks
+
     def search_by_text(
         self,
         query_text: str,
         top_k: int = 5,
-        user_id: Optional[int] = None
+        user_id: Optional[int] = None,
+        document_id: Optional[Union[str, int]] = None
     ) -> List[Dict[str, Any]]:
         """
         End-to-end semantic search: generates query embedding using EmbeddingService
@@ -294,6 +348,7 @@ class VectorStoreService:
             query_text: Natural language search query.
             top_k: Maximum number of results to return.
             user_id: Optional user ID for ownership filtering.
+            document_id: Optional document ID or filename for strict single-document scoping.
 
         Returns:
             Ranked list of matching chunk records sorted by similarity score.
@@ -305,7 +360,7 @@ class VectorStoreService:
         if not query_embedding:
             return []
 
-        return self.search(query_embedding, top_k=top_k, user_id=user_id)
+        return self.search(query_embedding, top_k=top_k, user_id=user_id, document_id=document_id)
 
     def save(self, directory_path: Optional[Union[str, Path]] = None) -> str:
         """

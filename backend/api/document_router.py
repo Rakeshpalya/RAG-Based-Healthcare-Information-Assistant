@@ -1,4 +1,5 @@
 from typing import Optional
+from pydantic import BaseModel
 from fastapi import APIRouter, File, UploadFile, HTTPException, status, Depends, Form, params
 from sqlalchemy.orm import Session
 
@@ -101,3 +102,48 @@ async def upload_document(
         db=db,
         content_type=file.content_type,
     )
+
+
+class SummarizeDocumentRequest(BaseModel):
+    format_instructions: Optional[str] = None
+
+
+@router.post(
+    "/{document_id}/summarize",
+    summary="Summarize a specific uploaded document",
+    status_code=status.HTTP_200_OK
+)
+async def summarize_document(
+    document_id: str,
+    payload: Optional[SummarizeDocumentRequest] = None,
+    current_user: User = Depends(get_current_db_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Summarizes a specific document strictly isolated by document_id.
+    Guarantees no cross-document contamination or mixing from other documents.
+    """
+    from backend.database.repositories import DocumentRepository
+    from backend.rag.rag_service import RAGService
+    from backend.services.vector_store_service import get_vector_store_service
+
+    # Validate ownership if document_id is an integer in DB
+    try:
+        doc_int_id = int(document_id)
+        doc = DocumentRepository.get_by_id(db, doc_int_id)
+        if doc and doc.user_id is not None and doc.user_id != current_user.id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Access denied: Cannot summarize another user's document."
+            )
+    except ValueError:
+        pass
+
+    rag_service = RAGService(vector_store=get_vector_store_service())
+    fmt = payload.format_instructions if payload else None
+    result = rag_service.generate_document_summary(
+        document_id=document_id,
+        user_id=current_user.id,
+        format_instructions=fmt
+    )
+    return result

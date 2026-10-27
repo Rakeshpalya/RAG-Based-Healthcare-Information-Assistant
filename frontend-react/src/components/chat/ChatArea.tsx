@@ -1,5 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import { ChatMessage, ChatMessageItem } from './ChatMessage';
+import { MarkdownRenderer } from './MarkdownRenderer';
 import { Sparkles, AlertCircle, RefreshCw } from 'lucide-react';
 
 interface ChatAreaProps {
@@ -90,9 +91,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
               <span>{streamingStatus || 'Synthesizing verified medical response...'}</span>
             </div>
             {streamingToken ? (
-              <div className="text-sm text-slate-800 leading-relaxed whitespace-pre-wrap font-sans">
-                {streamingToken}
-              </div>
+              <MarkdownRenderer content={streamingToken} />
             ) : (
               <div className="space-y-2 animate-pulse pt-1">
                 <div className="h-3 bg-slate-200 rounded w-3/4" />

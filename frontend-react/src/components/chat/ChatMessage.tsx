@@ -4,7 +4,8 @@ import { CitationCard } from './CitationCard';
 import { EmergencyBanner } from './EmergencyBanner';
 import { ContraindicationBanner } from './ContraindicationBanner';
 import { RequestIdBadge } from './RequestIdBadge';
-import { formatDate, formatAssistantText } from '../../utils/formatters';
+import { formatDate } from '../../utils/formatters';
+import { MarkdownRenderer } from './MarkdownRenderer';
 import { User as UserIcon, Bot, Clock } from 'lucide-react';
 
 export interface ChatMessageItem {
@@ -71,9 +72,7 @@ export const ChatMessage: React.FC<ChatMessageProps> = ({ message }) => {
                 )}
 
                 {/* 3. Assistant Answer Text */}
-                <div className="text-sm text-slate-800 leading-relaxed whitespace-pre-wrap font-sans space-y-2">
-                  {formatAssistantText(message.text)}
-                </div>
+                <MarkdownRenderer content={message.text} />
 
                 {/* 4. Grounded Source Citations */}
                 {message.sources && message.sources.length > 0 && (

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { documentApi } from '../api/documentApi';
 import { DocumentRecord } from '../types';
 import { DocumentCard } from '../components/documents/DocumentCard';
@@ -6,11 +7,16 @@ import { DocumentUploadModal } from '../components/documents/DocumentUploadModal
 import { FileText, UploadCloud, RefreshCw, Loader2, AlertCircle } from 'lucide-react';
 
 export const DocumentsPage: React.FC = () => {
+  const navigate = useNavigate();
   const [documents, setDocuments] = useState<DocumentRecord[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
   const [deletingId, setDeletingId] = useState<number | null>(null);
+
+  const handleSummarize = (doc: DocumentRecord) => {
+    navigate(`/chat?document_id=${doc.id}&action=summarize&filename=${encodeURIComponent(doc.filename)}`);
+  };
 
   const fetchDocuments = async () => {
     setIsLoading(true);
@@ -120,6 +126,7 @@ export const DocumentsPage: React.FC = () => {
               key={doc.id}
               doc={doc}
               onDelete={handleDelete}
+              onSummarize={handleSummarize}
               isDeleting={deletingId === doc.id}
             />
           ))}
