@@ -3632,11 +3632,18 @@ class RAGService:
             logger.warning("RAG synthesis halted due to AI service error: %s", str(gse))
             gen_ms = 0.0
             total_ms = round(retrieval_timings.get("total_retrieval_time_ms", 0.0), 2)
-            clean_unavailable_msg = getattr(gse, "message", str(gse)) or (
-                "The AI generation service is temporarily unavailable due to high demand. "
-                "Your document passages were retrieved successfully, but answer generation "
-                "could not be completed at this time. Please wait a few moments and try your inquiry again."
-            )
+            if isinstance(gse, OpenAIServiceError) and getattr(gse, "error_type", "") == "quota_exhausted":
+                clean_unavailable_msg = getattr(gse, "message", str(gse)) or (
+                    "The AI generation service is temporarily unavailable due to high demand. "
+                    "Your document passages were retrieved successfully, but answer generation "
+                    "could not be completed at this time. Please wait a few moments and try your inquiry again."
+                )
+            else:
+                clean_unavailable_msg = (
+                    "The AI generation service is temporarily unavailable due to high demand. "
+                    "Your document passages were retrieved successfully, but answer generation "
+                    "could not be completed at this time. Please wait a few moments and try your inquiry again."
+                )
             return {
                 "question": question,
                 "answer": clean_unavailable_msg,
@@ -5057,11 +5064,18 @@ class RAGService:
         except (GeminiServiceError, OpenAIServiceError) as gse:
             elapsed_ms = round((time.perf_counter() - start_time) * 1000.0, 2)
             logger.warning("Streaming generation failed cleanly: %s", str(gse))
-            clean_unavailable_msg = getattr(gse, "message", str(gse)) or (
-                "The AI generation service is temporarily unavailable due to high demand. "
-                "Your document passages were retrieved successfully, but answer generation "
-                "could not be completed at this time. Please wait a few moments and try your inquiry again."
-            )
+            if isinstance(gse, OpenAIServiceError) and getattr(gse, "error_type", "") == "quota_exhausted":
+                clean_unavailable_msg = getattr(gse, "message", str(gse)) or (
+                    "The AI generation service is temporarily unavailable due to high demand. "
+                    "Your document passages were retrieved successfully, but answer generation "
+                    "could not be completed at this time. Please wait a few moments and try your inquiry again."
+                )
+            else:
+                clean_unavailable_msg = (
+                    "The AI generation service is temporarily unavailable due to high demand. "
+                    "Your document passages were retrieved successfully, but answer generation "
+                    "could not be completed at this time. Please wait a few moments and try your inquiry again."
+                )
             yield ("error", {
                 "request_id": trace_id,
                 "error": clean_unavailable_msg,
